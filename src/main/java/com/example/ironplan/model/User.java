@@ -19,8 +19,6 @@ public class User implements UserDetails {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
-
     @Column(unique = true, nullable = false)
     private String email;
 
@@ -35,6 +33,8 @@ public class User implements UserDetails {
         createdAt = LocalDateTime.now();
         if (xpPoints == null)   xpPoints = 0;
         if (role == null) role = Role.USER;
+        if (lifetimeXp == null) lifetimeXp = 0;
+        if (xpRank == null)     xpRank = XpRank.NOVATO_I;
     }
 
     @Builder.Default
@@ -58,6 +58,16 @@ public class User implements UserDetails {
 
     @Column(nullable = false)
     private Integer trainDays;
+
+    // XP acumulado de por vida (solo suma cuando xpDelta > 0)
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer lifetimeXp = 0;
+
+    // Rango visual basado en lifetimeXp (Novato I, II, etc.)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 40)
+    private XpRank xpRank;
 
 
     @Enumerated(EnumType.STRING)
