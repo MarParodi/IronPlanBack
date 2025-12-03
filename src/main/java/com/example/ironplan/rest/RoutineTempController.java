@@ -2,12 +2,18 @@
 package com.example.ironplan.rest;
 
 import com.example.ironplan.model.Goal;
+import com.example.ironplan.model.User;
+import com.example.ironplan.rest.dto.CreateRoutineRequest;
+import com.example.ironplan.rest.dto.CreateRoutineResponse;
 import com.example.ironplan.rest.dto.RoutineDetailResponse;
 import com.example.ironplan.rest.dto.RoutineListItemResponse;
 import com.example.ironplan.rest.dto.routine.RoutineOverviewResponse;
 import com.example.ironplan.service.RoutineTemplateService;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,6 +24,18 @@ public class RoutineTempController {
 
     public RoutineTempController(RoutineTemplateService service) {
         this.service = service;
+    }
+
+    /**
+     * Crear una nueva rutina
+     */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public CreateRoutineResponse create(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody CreateRoutineRequest request
+    ) {
+        return service.create(user, request);
     }
 
     @GetMapping("/{id}")
