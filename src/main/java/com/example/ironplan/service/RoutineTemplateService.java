@@ -1,9 +1,7 @@
 // src/main/java/com/example/ironplan/service/RoutineTemplateService.java
 package com.example.ironplan.service;
 
-import com.example.ironplan.model.RoutineStatus;
-import com.example.ironplan.model.RoutineTemplate;
-import com.example.ironplan.model.RoutineDetail;
+import com.example.ironplan.model.*;
 import com.example.ironplan.repository.RoutineTemplateRepository;
 import com.example.ironplan.repository.RoutineDetailRepository;
 import com.example.ironplan.rest.dto.RoutineDetailResponse;
@@ -51,14 +49,40 @@ public class RoutineTemplateService {
     }
 
     // ---------- Listas ----------
-    // Catálogo público publicado
-    public Page<RoutineListItemResponse> listPublic(Pageable pageable) {
-        return repo.findPublicList(RoutineStatus.PUBLISHED, pageable);
+    // Catálogo público publicado con filtros opcionales
+    public Page<RoutineListItemResponse> listPublic(String search, Goal goal, Integer daysPerWeek, Pageable pageable) {
+        return repo.findPublicWithFilters(RoutineStatus.PUBLISHED, search, goal, daysPerWeek, pageable)
+                .map(this::toListItemResponse);
     }
 
     // Panel admin (todas)
     public Page<RoutineListItemResponse> listAll(Pageable pageable) {
-        return repo.findAllList(pageable);
+        return repo.findAll(pageable)
+                .map(this::toListItemResponse);
+    }
+
+    // Mapea RoutineTemplate a RoutineListItemResponse
+    // Si el type es SHARED_COMMUNITY, cambia accessType a USER_SHARED y agrega ownerUsername
+    private RoutineListItemResponse toListItemResponse(RoutineTemplate r) {
+        Access_Type accessType = r.getAccess();
+        String ownerUsername = null;
+
+        // Si es una rutina compartida por la comunidad, cambiar accessType y obtener username
+        if (r.getType() == Type.SHARED_COMMUNITY && r.getUser() != null) {
+            accessType = Access_Type.USER_SHARED;
+            ownerUsername = r.getUser().getDisplayUsername();
+        }
+
+        return new RoutineListItemResponse(
+                r.getId(),
+                r.getName(),
+                r.getGoal(),
+                accessType,
+                r.getImg(),
+                r.getDescription(),
+                ownerUsername,
+                r.getUsageCount() != null ? r.getUsageCount() : 0
+        );
     }
 
     // ---------- OVERVIEW grande (Rutina Híbrida) ----------

@@ -74,6 +74,15 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private Gender gender;
 
+    // Rutina actual del usuario (puede ser null si no tiene ninguna activa)
+    @ManyToOne
+    @JoinColumn(name = "current_routine_id")
+    private RoutineTemplate currentRoutine;
+
+    // Fecha en que empezó la rutina actual
+    @Column(name = "routine_started_at")
+    private LocalDateTime routineStartedAt;
+
     @Override public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
@@ -84,4 +93,6 @@ public class User implements UserDetails {
     @Override public boolean isCredentialsNonExpired() { return true; }
     @Override public boolean isEnabled() { return true; }
 
+    // Devuelve el username real (no el email que usa Spring Security)
+    public String getDisplayUsername() { return username; }
 }

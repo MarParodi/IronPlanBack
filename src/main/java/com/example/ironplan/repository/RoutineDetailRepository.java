@@ -12,6 +12,9 @@ public interface RoutineDetailRepository extends JpaRepository<RoutineDetail, Lo
     // Para obtener una sesión verificando que pertenece a esa rutina
     Optional<RoutineDetail> findByIdAndRoutine_Id(Long sessionId, Long routineId);
 
-    // (útil a futuro) listar todas las sesiones de una rutina
+    // Listar todas las sesiones de una rutina ordenadas por bloque y orden
     List<RoutineDetail> findByRoutine_IdOrderByBlockNumberAscOrderInBlockAsc(Long routineId);
+
+    // Listar sesiones de un bloque específico de una rutina
+    List<RoutineDetail> findByRoutine_IdAndBlockNumberOrderByOrderInBlockAsc(Long routineId, Integer blockNumber);
 }

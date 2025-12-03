@@ -10,5 +10,7 @@ public record RoutineListItemResponse(
         Goal goal,
         Access_Type accessType,
         String img,           // = thumbnailUrl
-        String description
+        String description,
+        String ownerUsername, // Username del creador (cuando accessType es USER_SHARED)
+        Integer usageCount    // Contador de usos (likes)
 ) {}

@@ -6,6 +6,7 @@ import com.example.ironplan.model.WorkoutExerciseStatus;
 import com.example.ironplan.model.WorkoutSession;
 import com.example.ironplan.model.WorkoutSessionStatus;
 import com.example.ironplan.model.WorkoutSet;
+import com.example.ironplan.model.XpEventType;
 import com.example.ironplan.repository.WorkoutExerciseRepository;
 import com.example.ironplan.repository.WorkoutSessionRepository;
 import com.example.ironplan.repository.WorkoutSetRepository;
@@ -24,15 +25,18 @@ public class WorkoutSetService {
     private final WorkoutSessionRepository sessionRepo;
     private final WorkoutExerciseRepository workoutExerciseRepo;
     private final WorkoutSetRepository workoutSetRepo;
+    private final XpService xpService;
 
     public WorkoutSetService(
             WorkoutSessionRepository sessionRepo,
             WorkoutExerciseRepository workoutExerciseRepo,
-            WorkoutSetRepository workoutSetRepo
+            WorkoutSetRepository workoutSetRepo,
+            XpService xpService
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
         this.workoutSetRepo = workoutSetRepo;
+        this.xpService = xpService;
     }
 
     // ---------- HELPERS PRIVADOS ----------
@@ -163,16 +167,27 @@ public class WorkoutSetService {
         session.setProgressPercentage(progress);
 
         // XP proporcional usando estimatedXp de RoutineDetail
+        int xpToGrant = 0;
         if (session.getRoutineDetail() != null && session.getRoutineDetail().getEstimatedXp() != null) {
             int estimatedXp = session.getRoutineDetail().getEstimatedXp();
-            int xp = (int) Math.round(estimatedXp * (progress / 100.0));
-            session.setXpEarned(xp);
+            xpToGrant = (int) Math.round(estimatedXp * (progress / 100.0));
+            session.setXpEarned(xpToGrant);
         }
 
-        // Si ya completó todo, marcamos la sesión como COMPLETED
-        if (total > 0 && completed >= total) {
+        // Si ya completó todo, marcamos la sesión como COMPLETED y sumamos XP al usuario
+        boolean wasActive = session.getStatus() == WorkoutSessionStatus.ACTIVE;
+        if (total > 0 && completed >= total && wasActive) {
             session.setStatus(WorkoutSessionStatus.COMPLETED);
             session.setCompletedAt(LocalDateTime.now());
+            
+            // ✅ SUMAR XP AL USUARIO
+            if (xpToGrant > 0) {
+                String description = String.format(
+                    "Sesión completada: %s",
+                    session.getRoutineDetail() != null ? session.getRoutineDetail().getTitle() : "Entrenamiento"
+                );
+                xpService.grantXp(session.getUser(), xpToGrant, XpEventType.WORKOUT_COMPLETED, description);
+            }
         }
 
         sessionRepo.save(session);

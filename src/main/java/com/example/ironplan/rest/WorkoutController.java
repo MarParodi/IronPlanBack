@@ -9,6 +9,7 @@ import com.example.ironplan.repository.WorkoutSetRepository;
 import com.example.ironplan.rest.dto.ReorderNextExercisesRequest;
 import com.example.ironplan.rest.dto.StartWorkoutRequest;
 import com.example.ironplan.rest.dto.WorkoutExerciseDetailResponse;
+import com.example.ironplan.rest.dto.WorkoutSessionSummaryResponse;
 import com.example.ironplan.rest.mapper.WorkoutExerciseViewMapper;
 import com.example.ironplan.rest.error.NotFoundException;
 import com.example.ironplan.service.WorkoutExerciseService;
@@ -115,5 +116,17 @@ public class WorkoutController {
         return ResponseEntity.noContent().build();
     }
 
+    // 3) OBTENER RESUMEN DE SESIÓN COMPLETADA
+    @GetMapping("/{sessionId}/summary")
+    public ResponseEntity<WorkoutSessionSummaryResponse> getSessionSummary(
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal User user
+    ) {
+        WorkoutSessionSummaryResponse summary = workoutSessionService.getSessionSummary(
+                sessionId,
+                user.getId()
+        );
+        return ResponseEntity.ok(summary);
+    }
 
 }

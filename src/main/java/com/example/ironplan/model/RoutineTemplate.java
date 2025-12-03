@@ -75,9 +75,11 @@ public class RoutineTemplate {
     @Column(name = "durationWeeks")
     private int durationWeeks;
 
+    // Contador de veces que se ha usado esta rutina
+    @Column(name = "usage_count", nullable = false)
+    private Integer usageCount = 0;
 
     @OneToMany(mappedBy = "routine", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RoutineDetail> sessions = new ArrayList<>();
-
 
 }

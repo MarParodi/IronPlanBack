@@ -3,10 +3,13 @@ package com.example.ironplan.service;
 
 import com.example.ironplan.model.*;
 import com.example.ironplan.repository.*;
+import com.example.ironplan.rest.dto.PreviousSessionComparison;
+import com.example.ironplan.rest.dto.WorkoutSessionSummaryResponse;
 import com.example.ironplan.rest.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,17 +22,20 @@ public class WorkoutSessionService {
 
     private final WorkoutSessionRepository sessionRepo;
     private final WorkoutExerciseRepository workoutExerciseRepo;
+    private final WorkoutSetRepository workoutSetRepo;
     private final RoutineDetailRepository routineDetailRepo;
     private final UserRepository userRepo;
 
     public WorkoutSessionService(
             WorkoutSessionRepository sessionRepo,
             WorkoutExerciseRepository workoutExerciseRepo,
+            WorkoutSetRepository workoutSetRepo,
             RoutineDetailRepository routineDetailRepo,
             UserRepository userRepo
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
+        this.workoutSetRepo = workoutSetRepo;
         this.routineDetailRepo = routineDetailRepo;
         this.userRepo = userRepo;
     }
@@ -173,6 +179,90 @@ public class WorkoutSessionService {
 
         // 6) Guardar cambios
         workoutExerciseRepo.saveAll(allExercises);
+    }
+
+    /**
+     * Obtiene el resumen de una sesión completada.
+     */
+    @Transactional(readOnly = true)
+    public WorkoutSessionSummaryResponse getSessionSummary(Long sessionId, Long userId) {
+        var session = getSessionForUser(sessionId, userId);
+        var user = session.getUser();
+        var routineDetail = session.getRoutineDetail();
+        
+        // Calcular duración
+        LocalDateTime startedAt = session.getStartedAt();
+        LocalDateTime completedAt = session.getCompletedAt() != null 
+                ? session.getCompletedAt() 
+                : LocalDateTime.now();
+        
+        long durationSeconds = Duration.between(startedAt, completedAt).getSeconds();
+        String durationFormatted = formatDuration(durationSeconds);
+        
+        // Contar series completadas
+        var exercises = workoutExerciseRepo.findByWorkoutSession_IdOrderByExerciseOrderAsc(sessionId);
+        int totalSeries = exercises.stream()
+                .mapToInt(e -> e.getPlannedSets() != null ? e.getPlannedSets() : 0)
+                .sum();
+        int completedSeries = exercises.stream()
+                .mapToInt(e -> e.getCompletedSets() != null ? e.getCompletedSets() : 0)
+                .sum();
+        
+        // Buscar sesión anterior para comparación
+        PreviousSessionComparison previousComparison = null;
+        if (routineDetail != null) {
+            var previousSession = sessionRepo.findFirstByUser_IdAndRoutineDetail_IdAndStatusAndIdNotOrderByCompletedAtDesc(
+                    userId,
+                    routineDetail.getId(),
+                    WorkoutSessionStatus.COMPLETED,
+                    sessionId
+            );
+            
+            if (previousSession.isPresent()) {
+                var prev = previousSession.get();
+                long prevDuration = 0;
+                if (prev.getStartedAt() != null && prev.getCompletedAt() != null) {
+                    prevDuration = Duration.between(prev.getStartedAt(), prev.getCompletedAt()).getSeconds();
+                }
+                
+                previousComparison = new PreviousSessionComparison(
+                        prev.getId(),
+                        prev.getCompletedAt(),
+                        prevDuration,
+                        prev.getXpEarned() != null ? prev.getXpEarned() : 0,
+                        durationSeconds - prevDuration,  // positivo = tardaste más
+                        (session.getXpEarned() != null ? session.getXpEarned() : 0) 
+                                - (prev.getXpEarned() != null ? prev.getXpEarned() : 0)
+                );
+            }
+        }
+        
+        return new WorkoutSessionSummaryResponse(
+                session.getId(),
+                routineDetail != null ? routineDetail.getTitle() : "Entrenamiento",
+                routineDetail != null ? routineDetail.getIcon() : null,
+                routineDetail != null ? routineDetail.getMuscles() : null,
+                startedAt,
+                completedAt,
+                durationSeconds,
+                durationFormatted,
+                session.getTotalExercises(),
+                session.getCompletedExercises(),
+                totalSeries,
+                completedSeries,
+                session.getProgressPercentage(),
+                session.getXpEarned(),
+                user.getXpPoints(),
+                user.getXpRank() != null ? user.getXpRank().name() : "NOVATO_I",
+                previousComparison
+        );
+    }
+    
+    private String formatDuration(long totalSeconds) {
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
 }

@@ -23,4 +23,19 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     );
     // Historial de sesiones de un usuario
     List<WorkoutSession> findByUser_IdOrderByStartedAtDesc(Long userId);
+    
+    // Buscar la sesión anterior completada del mismo routineDetail (para comparación)
+    Optional<WorkoutSession> findFirstByUser_IdAndRoutineDetail_IdAndStatusAndIdNotOrderByCompletedAtDesc(
+            Long userId,
+            Long routineDetailId,
+            WorkoutSessionStatus status,
+            Long excludeSessionId
+    );
+
+    // Buscar todas las sesiones completadas de una rutina específica para un usuario
+    List<WorkoutSession> findByUser_IdAndRoutineDetail_Routine_IdAndStatus(
+            Long userId,
+            Long routineId,
+            WorkoutSessionStatus status
+    );
 }

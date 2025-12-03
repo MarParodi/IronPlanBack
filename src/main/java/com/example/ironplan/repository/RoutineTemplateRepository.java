@@ -1,11 +1,12 @@
 // src/main/java/com/example/ironplan/repository/RoutineTemplateRepository.java
 package com.example.ironplan.repository;
 
+import com.example.ironplan.model.Goal;
 import com.example.ironplan.model.RoutineStatus;
 import com.example.ironplan.model.RoutineTemplate;
-import com.example.ironplan.rest.dto.RoutineListItemResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -15,22 +16,28 @@ public interface RoutineTemplateRepository extends JpaRepository<RoutineTemplate
 
     Optional<RoutineTemplate> findById(Long id);
 
-    // Catálogo público (PUBLISHED + isPublic=true)
+    // Catálogo público básico (PUBLISHED + isPublic=true)
+    Page<RoutineTemplate> findByStatusAndIsPublicTrue(RoutineStatus status, Pageable pageable);
+
+    // Catálogo público con filtros opcionales de búsqueda, goal y días por semana
     @Query("""
-           select new com.example.ironplan.rest.dto.RoutineListItemResponse(
-               r.id, r.name, r.goal, r.access, r.img, r.description
-           )
-           from RoutineTemplate r
-           where r.status = :status and r.isPublic = true
+           SELECT r FROM RoutineTemplate r
+           WHERE r.status = :status AND r.isPublic = true
+           AND (:search IS NULL OR LOWER(r.name) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR LOWER(r.description) LIKE LOWER(CONCAT('%', :search, '%')))
+           AND (:goal IS NULL OR r.goal = :goal)
+           AND (:daysPerWeek IS NULL OR r.days_per_week = :daysPerWeek)
            """)
-    Page<RoutineListItemResponse> findPublicList(RoutineStatus status, Pageable pageable);
+    Page<RoutineTemplate> findPublicWithFilters(
+            @Param("status") RoutineStatus status,
+            @Param("search") String search,
+            @Param("goal") Goal goal,
+            @Param("daysPerWeek") Integer daysPerWeek,
+            Pageable pageable
+    );
+
     long countByUser_Id(Long userId);
+
     // (Opcional) Todas las rutinas (para panel admin)
-    @Query("""
-           select new com.example.ironplan.rest.dto.RoutineListItemResponse(
-               r.id, r.name, r.goal, r.access, r.img, r.description
-           )
-           from RoutineTemplate r
-           """)
-    Page<RoutineListItemResponse> findAllList(Pageable pageable);
+    Page<RoutineTemplate> findAll(Pageable pageable);
 }

@@ -3,12 +3,18 @@ package com.example.ironplan.model;
 
 public enum XpRank {
 
-    NOVATO_I(0,        "Novato I"),
-    NOVATO_II(1000,    "Novato II"),
-    NOVATO_III(2500,   "Novato III"),
-    INTERMEDIO_I(4000, "Intermedio I"),
-    INTERMEDIO_II(6000,"Intermedio II"),
-    AVANZADO_I(9000,   "Avanzado I");
+    NOVATO_I(0,           "Novato I"),
+    NOVATO_II(1000,       "Novato II"),
+    NOVATO_III(2500,      "Novato III"),
+    INTERMEDIO_I(5000,    "Intermedio I"),
+    INTERMEDIO_II(10000,  "Intermedio II"),
+    INTERMEDIO_III(20000, "Intermedio III"),
+    AVANZADO_I(35000,     "Avanzado I"),
+    AVANZADO_II(55000,    "Avanzado II"),
+    AVANZADO_III(80000,   "Avanzado III"),
+    ELITE(110000,         "Elite"),
+    MAESTRO(150000,       "Maestro"),
+    LEYENDA(200000,       "Leyenda");
 
     private final int minXp;
     private final String displayName;
