@@ -6,6 +6,7 @@ import com.example.ironplan.model.WorkoutSession;
 import com.example.ironplan.model.WorkoutSet;
 import com.example.ironplan.repository.WorkoutExerciseRepository;
 import com.example.ironplan.repository.WorkoutSetRepository;
+import com.example.ironplan.rest.dto.ReorderNextExercisesRequest;
 import com.example.ironplan.rest.dto.StartWorkoutRequest;
 import com.example.ironplan.rest.dto.WorkoutExerciseDetailResponse;
 import com.example.ironplan.rest.mapper.WorkoutExerciseViewMapper;
@@ -98,4 +99,21 @@ public class WorkoutController {
 
         return ResponseEntity.ok(response);
     }
+
+
+    @PatchMapping("/sessions/{sessionId}/exercises/reorder-next")
+    public ResponseEntity<Void> reorderNextExercises(
+            @PathVariable Long sessionId,
+            @RequestBody ReorderNextExercisesRequest request,
+            @AuthenticationPrincipal User user   // ⬅️ aquí va TU entidad User, no CustomUserDetails
+    ) {
+        workoutSessionService.reorderNextExercises(
+                sessionId,
+                user.getId(),                     // ⬅️ esto ahora compila, User sí tiene getId()
+                request.workoutExerciseIds()
+        );
+        return ResponseEntity.noContent().build();
+    }
+
+
 }

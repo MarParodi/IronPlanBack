@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(
@@ -73,4 +74,8 @@ public class WorkoutSession {
     public void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+
+    @OneToMany(mappedBy = "workoutSession")
+    private List<WorkoutExercise> WorkoutExercises;
+
 }

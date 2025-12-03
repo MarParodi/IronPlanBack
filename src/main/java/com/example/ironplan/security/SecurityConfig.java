@@ -43,11 +43,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**", "/templates/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/exercises/**").permitAll()
-
                         .requestMatchers(HttpMethod.GET, "/api/routines/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/workouts/start").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/workouts/**").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/workouts/**").authenticated()
+                        .requestMatchers("/api/workouts/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/profile/me").authenticated()
                         .anyRequest().authenticated()
                 )

@@ -1,12 +1,18 @@
 package com.example.ironplan.rest.mapper;
 
 import com.example.ironplan.model.Exercise;
+import com.example.ironplan.model.RoutineExercise;
 import com.example.ironplan.model.WorkoutExercise;
 import com.example.ironplan.model.WorkoutSession;
 import com.example.ironplan.model.WorkoutSet;
+import com.example.ironplan.rest.dto.NextExerciseSummaryDto;
 import com.example.ironplan.rest.dto.WorkoutExerciseDetailResponse;
 import com.example.ironplan.rest.dto.WorkoutPreviousSetDto;
 import com.example.ironplan.rest.dto.WorkoutSessionProgressDto;
+
+import java.util.Comparator;
+import java.util.Collections;
+import java.util.List;
 
 public final class WorkoutExerciseViewMapper {
 
@@ -17,10 +23,7 @@ public final class WorkoutExerciseViewMapper {
             WorkoutExercise exercise,
             WorkoutSet previousSet
     ) {
-        Exercise catalogExercise = exercise.getRoutineExercise() != null
-                ? exercise.getRoutineExercise().getExercise()
-                : null;
-
+        // 1) Serie anterior
         WorkoutPreviousSetDto previousDto = null;
         if (previousSet != null) {
             previousDto = new WorkoutPreviousSetDto(
@@ -30,13 +33,53 @@ public final class WorkoutExerciseViewMapper {
             );
         }
 
+        // 2) Lista de ejercicios de la sesión (puede venir null)
+        List<WorkoutExercise> allExercises = session.getWorkoutExercises();
+        if (allExercises == null) {
+            allExercises = Collections.emptyList();
+        }
+
+        // 3) Total de ejercicios: primero usamos el campo de la sesión,
+        //    si viene null, caemos al tamaño de la lista (o 0 si también está vacía)
+        int totalExercises = session.getTotalExercises() != null
+                ? session.getTotalExercises()
+                : allExercises.size();
+
+        // 4) Progreso de la sesión
         WorkoutSessionProgressDto progressDto = new WorkoutSessionProgressDto(
                 session.getId(),
                 exercise.getExerciseOrder(),
-                session.getTotalExercises() != null ? session.getTotalExercises() : 0,
+                totalExercises,
                 session.getProgressPercentage() != null ? session.getProgressPercentage() : 0.0,
-                session.getXpEarned() != null ? session.getXpEarned() : 0
+                session.getXpEarned() != null ? session.getXpEarned() : 0,
+                session.getStartedAt() != null ? session.getStartedAt() : session.getCreatedAt()
         );
+
+        // 5) Lista de siguientes ejercicios (si no hay lista, queda vacío)
+        List<NextExerciseSummaryDto> nextDtos = allExercises.stream()
+                .filter(we -> we.getExerciseOrder() > exercise.getExerciseOrder())
+                .sorted(Comparator.comparingInt(WorkoutExercise::getExerciseOrder))
+                .map(next -> {
+                    RoutineExercise re = next.getRoutineExercise();
+                    Exercise base = re != null ? re.getExercise() : null;
+
+                    return new NextExerciseSummaryDto(
+                            next.getId(),
+                            next.getExerciseOrder(),
+                            next.getExerciseName(),
+                            next.getPlannedSets(),
+                            next.getPlannedRepsMin(),
+                            next.getPlannedRepsMax(),
+                            next.getPlannedRir(),
+                            base != null ? base.getId() : null,
+                            base != null ? base.getVideoUrl() : null
+                    );
+                })
+                .toList();
+
+        // 6) Datos del ejercicio actual (también desde RoutineExercise → Exercise)
+        RoutineExercise currentRe = exercise.getRoutineExercise();
+        Exercise currentBase = currentRe != null ? currentRe.getExercise() : null;
 
         return new WorkoutExerciseDetailResponse(
                 session.getId(),
@@ -48,10 +91,11 @@ public final class WorkoutExerciseViewMapper {
                 exercise.getPlannedRepsMax(),
                 exercise.getPlannedRir(),
                 exercise.getPlannedRestSeconds(),
-                catalogExercise != null ? catalogExercise.getId() : null,
-                catalogExercise != null ? catalogExercise.getVideoUrl() : null,
+                currentBase != null ? currentBase.getId() : null,
+                currentBase != null ? currentBase.getVideoUrl() : null,
                 previousDto,
-                progressDto
+                progressDto,
+                nextDtos
         );
     }
 }

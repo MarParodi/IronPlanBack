@@ -22,5 +22,7 @@ public record WorkoutExerciseDetailResponse(
         WorkoutPreviousSetDto previousSet,
 
         // progreso global de la sesión
-        WorkoutSessionProgressDto progress
+        WorkoutSessionProgressDto progress,
+
+        java.util.List<NextExerciseSummaryDto> nextExercises
 ) {}

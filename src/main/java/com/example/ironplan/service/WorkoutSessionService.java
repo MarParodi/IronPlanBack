@@ -9,6 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class WorkoutSessionService {
@@ -42,7 +46,6 @@ public class WorkoutSessionService {
         var detail = routineDetailRepo.findById(routineDetailId)
                 .orElseThrow(() -> new NotFoundException("Sesión de rutina no encontrada: " + routineDetailId));
 
-        // Crear la sesión principal
         var session = new WorkoutSession();
         session.setUser(user);
         session.setRoutineDetail(detail);
@@ -52,15 +55,13 @@ public class WorkoutSessionService {
         session.setCompletedExercises(0);
         session.setProgressPercentage(0.0);
 
-        // Total de ejercicios según la plantilla
         var routineExercises = detail.getExercises();
         int totalExercises = routineExercises != null ? routineExercises.size() : 0;
         session.setTotalExercises(totalExercises);
 
-        // Guardamos primero la sesión para tener ID
+        // guardamos para obtener ID
         session = sessionRepo.save(session);
 
-        // Crear los WorkoutExercise a partir de RoutineExercise
         var workoutExercises = new ArrayList<WorkoutExercise>();
         if (routineExercises != null) {
             for (RoutineExercise re : routineExercises) {
@@ -68,7 +69,6 @@ public class WorkoutSessionService {
                 we.setWorkoutSession(session);
                 we.setRoutineExercise(re);
 
-                // Copiamos info básica
                 var displayName = re.getDisplayName();
                 if (displayName == null && re.getExercise() != null) {
                     displayName = re.getExercise().getName();
@@ -80,6 +80,7 @@ public class WorkoutSessionService {
                 we.setPlannedRepsMin(re.getRepsMin());
                 we.setPlannedRepsMax(re.getRepsMax());
                 we.setPlannedRir(re.getRir());
+                // si re.getRestMinutes() son minutos, aquí probablemente quieres * 60
                 we.setPlannedRestSeconds(re.getRestMinutes());
 
                 we.setStatus(WorkoutExerciseStatus.PENDING);
@@ -89,11 +90,15 @@ public class WorkoutSessionService {
             }
         }
 
-        // Guardamos todos los ejercicios de la sesión
+        // guardamos los ejercicios
         workoutExerciseRepo.saveAll(workoutExercises);
+
+        // 👇👇 ESTA ES LA CLAVE para que el mapper los vea
+        session.setWorkoutExercises(workoutExercises);
 
         return session;
     }
+
 
     /**
      * Obtiene una sesión por id, asegurando que pertenece al usuario dado.
@@ -123,4 +128,51 @@ public class WorkoutSessionService {
         session.setProgressPercentage(100.0);
         sessionRepo.save(session);
     }
+
+    @Transactional
+    public void reorderNextExercises(Long sessionId, Long userId, List<Long> workoutExerciseIds) {
+        // 1) Asegurarnos de que la sesión existe y es del usuario
+        WorkoutSession session = getSessionForUser(sessionId, userId);
+
+        List<WorkoutExercise> allExercises = session.getWorkoutExercises();
+        if (allExercises == null || allExercises.isEmpty()) {
+            throw new NotFoundException("La sesión no tiene ejercicios configurados.");
+        }
+
+        // 2) Determinar el ejercicio “actual”
+        //    - Primero intentamos encontrar uno con estado ACTIVE
+        //    - Si no hay, usamos el de menor exerciseOrder
+        Integer currentOrder = allExercises.stream()
+                .map(WorkoutExercise::getExerciseOrder)
+                .findFirst()
+                .orElse(
+                        allExercises.stream()
+                                .map(WorkoutExercise::getExerciseOrder)
+                                .min(Integer::compareTo)
+                                .orElse(0)
+                );
+
+        // 3) Mapear todos los ejercicios de la sesión por ID
+        Map<Long, WorkoutExercise> byId = allExercises.stream()
+                .collect(Collectors.toMap(WorkoutExercise::getId, Function.identity()));
+
+        // 4) Validar que TODOS los ids que mandó el front están en la sesión
+        for (Long id : workoutExerciseIds) {
+            if (!byId.containsKey(id)) {
+                throw new IllegalArgumentException("El ejercicio " + id + " no pertenece a la sesión");
+            }
+        }
+
+        // 5) Reenumerar solo los "siguientes" a partir de currentOrder + 1
+        int newOrder = currentOrder + 1;
+
+        for (Long id : workoutExerciseIds) {
+            WorkoutExercise we = byId.get(id);
+            we.setExerciseOrder(newOrder++);
+        }
+
+        // 6) Guardar cambios
+        workoutExerciseRepo.saveAll(allExercises);
+    }
+
 }
