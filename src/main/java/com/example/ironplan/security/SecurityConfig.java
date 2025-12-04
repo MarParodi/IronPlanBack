@@ -40,10 +40,12 @@ public class SecurityConfig {
                 .cors(c -> c.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/templates/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/exercises/**").permitAll()  // 👈 públicas
-
+                        .requestMatchers(HttpMethod.GET, "/api/exercises/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/routines/**").permitAll()
+                        .requestMatchers("/api/workouts/**").authenticated()
+                        .requestMatchers("/api/profile/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

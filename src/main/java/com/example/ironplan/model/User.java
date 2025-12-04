@@ -19,8 +19,6 @@ public class User implements UserDetails {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
-
     @Column(unique = true, nullable = false)
     private String email;
 
@@ -35,6 +33,8 @@ public class User implements UserDetails {
         createdAt = LocalDateTime.now();
         if (xpPoints == null)   xpPoints = 0;
         if (role == null) role = Role.USER;
+        if (lifetimeXp == null) lifetimeXp = 0;
+        if (xpRank == null)     xpRank = XpRank.NOVATO_I;
     }
 
     @Builder.Default
@@ -59,10 +59,29 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private Integer trainDays;
 
+    // XP acumulado de por vida (solo suma cuando xpDelta > 0)
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer lifetimeXp = 0;
+
+    // Rango visual basado en lifetimeXp (Novato I, II, etc.)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 40)
+    private XpRank xpRank;
+
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Gender gender;
+
+    // Rutina actual del usuario (puede ser null si no tiene ninguna activa)
+    @ManyToOne
+    @JoinColumn(name = "current_routine_id")
+    private RoutineTemplate currentRoutine;
+
+    // Fecha en que empezó la rutina actual
+    @Column(name = "routine_started_at")
+    private LocalDateTime routineStartedAt;
 
     @Override public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
@@ -74,4 +93,6 @@ public class User implements UserDetails {
     @Override public boolean isCredentialsNonExpired() { return true; }
     @Override public boolean isEnabled() { return true; }
 
+    // Devuelve el username real (no el email que usa Spring Security)
+    public String getDisplayUsername() { return username; }
 }
