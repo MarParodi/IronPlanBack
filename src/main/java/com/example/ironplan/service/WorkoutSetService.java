@@ -10,6 +10,7 @@ import com.example.ironplan.model.XpEventType;
 import com.example.ironplan.repository.WorkoutExerciseRepository;
 import com.example.ironplan.repository.WorkoutSessionRepository;
 import com.example.ironplan.repository.WorkoutSetRepository;
+import com.example.ironplan.rest.dto.WorkoutPreviousSetDto;
 import com.example.ironplan.rest.error.NotFoundException;
 import com.example.ironplan.rest.dto.WorkoutSetInput;
 import org.springframework.stereotype.Service;
@@ -192,4 +193,7 @@ public class WorkoutSetService {
 
         sessionRepo.save(session);
     }
+
+
+
 }

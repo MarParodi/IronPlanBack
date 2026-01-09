@@ -9,12 +9,12 @@ import java.util.Optional;
 
 public interface RoutineDetailRepository extends JpaRepository<RoutineDetail, Long> {
 
-    // Para obtener una sesión verificando que pertenece a esa rutina
-    Optional<RoutineDetail> findByIdAndRoutine_Id(Long sessionId, Long routineId);
+    // Para obtener una sesión verificando que pertenece a ese bloque
+    Optional<RoutineDetail> findByIdAndBlock_Id(Long sessionId, Long blockId);
 
-    // Listar todas las sesiones de una rutina ordenadas por bloque y orden
-    List<RoutineDetail> findByRoutine_IdOrderByBlockNumberAscOrderInBlockAsc(Long routineId);
+    // Listar todas las sesiones de un bloque ordenadas por sessionOrder
+    List<RoutineDetail> findByBlock_IdOrderBySessionOrderAsc(Long blockId);
 
-    // Listar sesiones de un bloque específico de una rutina
-    List<RoutineDetail> findByRoutine_IdAndBlockNumberOrderByOrderInBlockAsc(Long routineId, Integer blockNumber);
+    // Listar todas las sesiones de una rutina (a través del bloque)
+    List<RoutineDetail> findByBlock_Routine_IdOrderByBlock_OrderIndexAscSessionOrderAsc(Long routineId);
 }

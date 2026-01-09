@@ -1,6 +1,7 @@
 package com.example.ironplan.rest;
 
 import com.example.ironplan.model.User;
+import com.example.ironplan.rest.dto.WorkoutPreviousSetDto;
 import com.example.ironplan.rest.dto.WorkoutSetItemRequest;
 import com.example.ironplan.rest.dto.WorkoutSetRequest;
 import com.example.ironplan.service.WorkoutSetService;
@@ -45,6 +46,9 @@ public class WorkoutSetController {
         // 204 No Content: operación OK sin body
         return ResponseEntity.noContent().build();
     }
+
+
+
 
     private static WorkoutSetInput toInput(WorkoutSetItemRequest item) {
         return new WorkoutSetInput(

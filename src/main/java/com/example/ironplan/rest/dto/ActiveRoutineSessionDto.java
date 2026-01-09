@@ -7,8 +7,7 @@ public record ActiveRoutineSessionDto(
         String title,
         Integer totalSeries,
         String mainMuscles,
-        Integer orderInBlock,
+        Integer sessionOrder,
         Boolean completed,
         LocalDateTime completedAt
 ) {}
-

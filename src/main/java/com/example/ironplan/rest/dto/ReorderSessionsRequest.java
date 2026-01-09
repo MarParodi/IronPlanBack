@@ -4,7 +4,6 @@ import java.util.List;
 
 public record ReorderSessionsRequest(
         Long routineId,
-        Integer blockNumber,
+        Long blockId,
         List<Long> sessionIds  // IDs de las sesiones en el nuevo orden
 ) {}
-

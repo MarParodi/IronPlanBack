@@ -1,6 +1,7 @@
 package com.example.ironplan.model;
 
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -19,10 +20,11 @@ public class RoutineTemplate {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 500)
     private String description;
 
-    @Column(nullable = false)
+    @Lob
+    @Column(columnDefinition = "TEXT")
     private String longDescription;
 
     @Enumerated(EnumType.STRING)
@@ -37,11 +39,11 @@ public class RoutineTemplate {
     private Boolean isPublic;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private Type type;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private Access_Type access;
 
     private int xp_cost;
@@ -72,6 +74,10 @@ public class RoutineTemplate {
     @Column(name = "suggestedLevel", nullable = false)
     private Level suggestedLevel;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private RoutineGender routineGender = RoutineGender.UNISEX;
+
     @Column(name = "durationWeeks")
     private int durationWeeks;
 
@@ -79,7 +85,21 @@ public class RoutineTemplate {
     @Column(name = "usage_count", nullable = false)
     private Integer usageCount = 0;
 
+    // REFACTORIZADO: Ahora RoutineTemplate tiene una lista de BLOCKS, no de sessions directamente
+    // La jerarquía es: RoutineTemplate (1) → (N) RoutineBlock (1) → (N) RoutineDetail
     @OneToMany(mappedBy = "routine", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RoutineDetail> sessions = new ArrayList<>();
+    @OrderBy("orderIndex ASC")
+    @JsonManagedReference
+    private List<RoutineBlock> blocks = new ArrayList<>();
 
+    // Helpers para mantener la relación bidireccional
+    public void addBlock(RoutineBlock block) {
+        blocks.add(block);
+        block.setRoutine(this);
+    }
+
+    public void removeBlock(RoutineBlock block) {
+        blocks.remove(block);
+        block.setRoutine(null);
+    }
 }

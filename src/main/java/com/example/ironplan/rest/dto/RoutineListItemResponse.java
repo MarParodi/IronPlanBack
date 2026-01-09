@@ -3,6 +3,7 @@ package com.example.ironplan.rest.dto;
 
 import com.example.ironplan.model.Access_Type;
 import com.example.ironplan.model.Goal;
+import com.example.ironplan.model.RoutineGender;
 
 public record RoutineListItemResponse(
         Long id,
@@ -12,5 +13,8 @@ public record RoutineListItemResponse(
         String img,           // = thumbnailUrl
         String description,
         String ownerUsername, // Username del creador (cuando accessType es USER_SHARED)
-        Integer usageCount    // Contador de usos (likes)
+        Integer usageCount,
+        RoutineGender routineGender,
+        Integer xpCost,       // Costo en XP para desbloquear
+        Boolean unlockedByUser // true si el usuario actual ya desbloqueó esta rutina
 ) {}

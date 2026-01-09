@@ -10,5 +10,6 @@ public record RoutineSessionExerciseDto(
         Integer repsMin,  // 7
         Integer repsMax,  // 9
         Integer rir,      // 1
-        Integer restMinutes// opcional, ej. 90 (para futuro)
+        Integer restMinutes,// opcional, ej. 90 (para futuro)
+        String instructions
 ) {}

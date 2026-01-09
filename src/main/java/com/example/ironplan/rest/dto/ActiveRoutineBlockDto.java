@@ -3,8 +3,10 @@ package com.example.ironplan.rest.dto;
 import java.util.List;
 
 public record ActiveRoutineBlockDto(
-        Integer blockNumber,
-        String blockTitle,
+        Long blockId,
+        Integer orderIndex,
+        String name,
+        String description,
+        Integer durationWeeks,
         List<ActiveRoutineSessionDto> sessions
 ) {}
-

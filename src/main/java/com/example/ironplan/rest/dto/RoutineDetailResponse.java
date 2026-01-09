@@ -9,6 +9,8 @@ public record RoutineDetailResponse(
         String name,
         Goal goal,
         Access_Type access,
+        String img,
         String description,
-        Level suggestedLevel
+        Level suggestedLevel,
+        Integer xp_cost
 ) {}

@@ -74,6 +74,16 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private Gender gender;
 
+    @Column(nullable = true)
+    private String profilePictureUrl;
+
+    @Column(nullable = true)
+    private int weight;
+
+    @Column(nullable = true)
+    private int height;
+
+
     // Rutina actual del usuario (puede ser null si no tiene ninguna activa)
     @ManyToOne
     @JoinColumn(name = "current_routine_id")

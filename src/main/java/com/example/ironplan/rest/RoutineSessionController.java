@@ -15,11 +15,21 @@ public class RoutineSessionController {
         this.sessionService = sessionService;
     }
 
+    // Endpoint para obtener detalle de sesión por rutina (busca a través de los bloques)
     @GetMapping("/{routineId}/sessions/{sessionId}")
     public RoutineSessionDetailDto getSessionDetail(
             @PathVariable Long routineId,
             @PathVariable Long sessionId
     ) {
-        return sessionService.getSessionDetail(routineId, sessionId);
+        return sessionService.getSessionDetailByRoutine(routineId, sessionId);
+    }
+
+    // Nuevo endpoint para obtener detalle de sesión por bloque
+    @GetMapping("/blocks/{blockId}/sessions/{sessionId}")
+    public RoutineSessionDetailDto getSessionDetailByBlock(
+            @PathVariable Long blockId,
+            @PathVariable Long sessionId
+    ) {
+        return sessionService.getSessionDetail(blockId, sessionId);
     }
 }

@@ -3,6 +3,7 @@ package com.example.ironplan.repository;
 
 import com.example.ironplan.model.WorkoutSession;
 import com.example.ironplan.model.WorkoutSessionStatus;
+import com.example.ironplan.rest.dto.RecentWorkoutDto;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -33,9 +34,12 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     );
 
     // Buscar todas las sesiones completadas de una rutina específica para un usuario
-    List<WorkoutSession> findByUser_IdAndRoutineDetail_Routine_IdAndStatus(
+    // ACTUALIZADO: Ahora navega a través del bloque para llegar a la rutina
+    List<WorkoutSession> findByUser_IdAndRoutineDetail_Block_Routine_IdAndStatus(
             Long userId,
             Long routineId,
             WorkoutSessionStatus status
     );
+
+    List<WorkoutSession> findByUser_IdAndStatusOrderByCompletedAtDesc(Long userId, WorkoutSessionStatus status);
 }
