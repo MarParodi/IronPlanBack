@@ -1,15 +1,13 @@
 package com.example.ironplan.rest;
 
 import com.example.ironplan.model.User;
-import com.example.ironplan.rest.dto.ActiveRoutineResponse;
-import com.example.ironplan.rest.dto.CurrentRoutineResponse;
-import com.example.ironplan.rest.dto.ProfileResponse;
-import com.example.ironplan.rest.dto.ReorderSessionsRequest;
-import com.example.ironplan.rest.dto.StartRoutineRequest;
+import com.example.ironplan.rest.dto.*;
 import com.example.ironplan.service.ProfileService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/profile")
@@ -93,9 +91,17 @@ public class ProfileController {
         profileService.reorderSessions(
                 user,
                 request.routineId(),
-                request.blockNumber(),
+                request.blockId(),
                 request.sessionIds()
         );
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/workouts")
+    public ResponseEntity<List<RecentWorkoutDto>> getWorkoutHistory(
+            @AuthenticationPrincipal User currentUser
+    ) {
+        return ResponseEntity.ok(profileService.getWorkoutHistory(currentUser));
+    }
+
 }

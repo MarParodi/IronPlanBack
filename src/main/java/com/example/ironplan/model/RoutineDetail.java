@@ -1,6 +1,7 @@
 // src/main/java/com/example/ironplan/model/RoutineDetail.java
 package com.example.ironplan.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -17,7 +18,7 @@ import java.util.List;
 @Table(
         name = "routine_sessions",
         indexes = {
-                @Index(name = "ix_rs_routine", columnList = "routine_id, session_order")
+                @Index(name = "ix_rs_block", columnList = "block_id, session_order")
         }
 )
 @Getter
@@ -29,12 +30,14 @@ public class RoutineDetail {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // A qué plantilla de rutina pertenece esta sesión
+    // REFACTORIZADO: Ahora apunta a RoutineBlock en lugar de RoutineTemplate
+    // La jerarquía es: RoutineTemplate (1) → (N) RoutineBlock (1) → (N) RoutineDetail
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "routine_id", nullable = false)
-    private RoutineTemplate routine;
+    @JoinColumn(name = "block_id", nullable = false)
+    @JsonBackReference(value = "block-sessions")
+    private RoutineBlock block;
 
-    // Orden dentro de la rutina (Día 1, Día 2, etc.)
+    // Orden dentro del bloque (Día 1, Día 2, etc.)
     @Min(1)
     @Column(name = "session_order", nullable = false)
     private Integer sessionOrder = 1;
@@ -111,15 +114,6 @@ public class RoutineDetail {
         ex.setSession(null);
     }
 
-    // Para agrupar en el bloque
-    @Column(nullable = false)
-    private Integer blockNumber;   // 1, 2, ...
-
-    @Column(nullable = false)
-    private String blockLabel;     // "Semana 1–12"
-
-    @Column(nullable = false)
-    private Integer orderInBlock;
-
-
+    // ELIMINADOS: blockNumber, blockLabel, orderInBlock
+    // Ahora esta lógica está manejada por la entidad padre RoutineBlock
 }

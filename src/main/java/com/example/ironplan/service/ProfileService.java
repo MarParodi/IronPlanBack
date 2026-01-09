@@ -11,7 +11,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class ProfileService {
@@ -20,6 +19,7 @@ public class ProfileService {
     private final WorkoutExerciseRepository workoutExerciseRepo;
     private final WorkoutSetRepository workoutSetRepo;
     private final RoutineTemplateRepository routineTemplateRepo;
+    private final RoutineBlockRepository routineBlockRepo;
     private final RoutineDetailRepository routineDetailRepo;
     private final UserXpEventRepository userXpEventRepo;
     private final UserRepository userRepo;
@@ -29,6 +29,7 @@ public class ProfileService {
             WorkoutExerciseRepository workoutExerciseRepo,
             WorkoutSetRepository workoutSetRepo,
             RoutineTemplateRepository routineTemplateRepo,
+            RoutineBlockRepository routineBlockRepo,
             RoutineDetailRepository routineDetailRepo,
             UserXpEventRepository userXpEventRepo,
             UserRepository userRepo
@@ -37,6 +38,7 @@ public class ProfileService {
         this.workoutExerciseRepo = workoutExerciseRepo;
         this.workoutSetRepo = workoutSetRepo;
         this.routineTemplateRepo = routineTemplateRepo;
+        this.routineBlockRepo = routineBlockRepo;
         this.routineDetailRepo = routineDetailRepo;
         this.userXpEventRepo = userXpEventRepo;
         this.userRepo = userRepo;
@@ -58,7 +60,8 @@ public class ProfileService {
                 user.getLifetimeXp() != null ? user.getLifetimeXp() : 0,
                 xpRankCode,
                 xpRankLabel,
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getProfilePictureUrl()
         );
 
         // -------- STATS --------
@@ -77,72 +80,105 @@ public class ProfileService {
                 totalXpActions
         );
 
-        // -------- ÚLTIMOS REGISTROS --------
+
+// -------- ÚLTIMOS REGISTROS --------
         var recentSessions = workoutSessionRepo
                 .findTop5ByUser_IdAndStatusOrderByStartedAtDesc(
                         user.getId(),
                         WorkoutSessionStatus.COMPLETED
                 );
 
-        List<RecentWorkoutDto> recent = new ArrayList<>();
-
+        List<RecentWorkoutDto> recent = new ArrayList<>(recentSessions.size());
         for (WorkoutSession session : recentSessions) {
-            // nombre
-            String routineName = session.getRoutineDetail() != null
-                    ? session.getRoutineDetail().getTitle()
-                    : "Sesión de entrenamiento";
-
-            // duración
-            long minutes = 0;
-            if (session.getStartedAt() != null && session.getCompletedAt() != null) {
-                minutes = Duration.between(
-                        session.getStartedAt(),
-                        session.getCompletedAt()
-                ).toMinutes();
-            }
-
-            // series y peso total (sencillo: contar sets y sumar weight*reps)
-            int totalSeries = 0;
-            double totalWeightKg = 0.0;
-
-            var exercises = workoutExerciseRepo
-                    .findByWorkoutSession_IdOrderByExerciseOrderAsc(session.getId());
-
-            for (WorkoutExercise ex : exercises) {
-                var sets = workoutSetRepo
-                        .findByWorkoutExercise_IdOrderBySetNumberAsc(ex.getId());
-
-                totalSeries += sets.size();
-
-                for (WorkoutSet set : sets) {
-                    int reps = set.getReps() != null ? set.getReps() : 0;
-                    double w  = set.getWeightKg() != null ? set.getWeightKg() : 0.0;
-                    totalWeightKg += w * reps;
-                }
-            }
-
-            recent.add(new RecentWorkoutDto(
-                    session.getId(),
-                    routineName,
-                    session.getStartedAt(),
-                    totalSeries,
-                    totalWeightKg,
-                    minutes
-            ));
+            recent.add(toRecentWorkoutDto(session));
         }
 
         return new ProfileResponse(header, stats, recent);
+
     }
+
+
+
+    //Historial de entrenamientos
+
+    private RecentWorkoutDto toRecentWorkoutDto(WorkoutSession session) {
+
+        // nombre
+        String routineName = session.getRoutineDetail() != null
+                ? session.getRoutineDetail().getTitle()
+                : "Sesión de entrenamiento";
+
+        // duración
+        long minutes = 0;
+        if (session.getStartedAt() != null && session.getCompletedAt() != null) {
+            minutes = Duration.between(session.getStartedAt(), session.getCompletedAt()).toMinutes();
+        }
+
+        // series y peso total (contar sets y sumar weight*reps)
+        int totalSeries = 0;
+        double totalWeightKg = 0.0;
+
+        var exercises = workoutExerciseRepo
+                .findByWorkoutSession_IdOrderByExerciseOrderAsc(session.getId());
+
+        for (WorkoutExercise ex : exercises) {
+            var sets = workoutSetRepo
+                    .findByWorkoutExercise_IdOrderBySetNumberAsc(ex.getId());
+
+            totalSeries += sets.size();
+
+            for (WorkoutSet set : sets) {
+                int reps = set.getReps() != null ? set.getReps() : 0;
+                double w  = set.getWeightKg() != null ? set.getWeightKg() : 0.0;
+                totalWeightKg += w * reps;
+            }
+        }
+
+        // ⚠️ tu constructor actual es:
+        // (id, routineName, startedAt, totalSeries, totalWeightKg, minutes)
+        return new RecentWorkoutDto(
+                session.getId(),
+                routineName,
+                session.getStartedAt(),
+                totalSeries,
+                totalWeightKg,
+                minutes
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<RecentWorkoutDto> getWorkoutHistory(User user) {
+
+        var sessions = workoutSessionRepo.findByUser_IdAndStatusOrderByCompletedAtDesc(
+                user.getId(),
+                WorkoutSessionStatus.COMPLETED
+        );
+
+        List<RecentWorkoutDto> history = new ArrayList<>(sessions.size());
+        for (WorkoutSession session : sessions) {
+            history.add(toRecentWorkoutDto(session));
+        }
+
+        return history;
+    }
+
+
 
     // -------- RUTINA ACTUAL --------
 
     /**
      * Asigna una rutina al usuario como su rutina actual
+     * e incrementa el contador de usos de la rutina
      */
     @Transactional
     public void startRoutine(User user, Long routineId) {
         RoutineTemplate routine = routineTemplateRepo.findById(routineId)
                 .orElseThrow(() -> new NotFoundException("Rutina no encontrada: " + routineId));
+
+        // Incrementar el contador de usos de la rutina
+        Integer currentUsage = routine.getUsageCount() != null ? routine.getUsageCount() : 0;
+        routine.setUsageCount(currentUsage + 1);
+        routineTemplateRepo.save(routine);
 
         user.setCurrentRoutine(routine);
         user.setRoutineStartedAt(LocalDateTime.now());
@@ -192,13 +228,13 @@ public class ProfileService {
             return null;
         }
 
-        // Obtener todas las sesiones de la rutina organizadas por bloque
-        List<RoutineDetail> allSessions = routineDetailRepo
-                .findByRoutine_IdOrderByBlockNumberAscOrderInBlockAsc(routine.getId());
+        // Obtener todos los bloques de la rutina ordenados
+        List<RoutineBlock> routineBlocks = routineBlockRepo
+                .findByRoutine_IdOrderByOrderIndexAsc(routine.getId());
 
         // Obtener sesiones completadas por el usuario para esta rutina
         List<WorkoutSession> completedWorkouts = workoutSessionRepo
-                .findByUser_IdAndRoutineDetail_Routine_IdAndStatus(
+                .findByUser_IdAndRoutineDetail_Block_Routine_IdAndStatus(
                         user.getId(),
                         routine.getId(),
                         WorkoutSessionStatus.COMPLETED
@@ -209,26 +245,15 @@ public class ProfileService {
                 .map(ws -> ws.getRoutineDetail().getId())
                 .collect(java.util.stream.Collectors.toSet());
 
-        // Agrupar sesiones por bloque
-        Map<Integer, List<RoutineDetail>> grouped = allSessions.stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        RoutineDetail::getBlockNumber,
-                        java.util.LinkedHashMap::new,
-                        java.util.stream.Collectors.toList()
-                ));
-
         // Crear bloques con sesiones
         List<ActiveRoutineBlockDto> blocks = new ArrayList<>();
         int totalSessions = 0;
         int completedSessions = 0;
 
-        for (var entry : grouped.entrySet()) {
-            int blockNumber = entry.getKey();
-            List<RoutineDetail> sessions = entry.getValue();
-            String blockTitle = sessions.get(0).getBlockLabel(); // "Semana 1", etc.
-
+        for (RoutineBlock block : routineBlocks) {
             List<ActiveRoutineSessionDto> sessionDtos = new ArrayList<>();
-            for (RoutineDetail detail : sessions) {
+            
+            for (RoutineDetail detail : block.getSessions()) {
                 boolean isCompleted = completedSessionIds.contains(detail.getId());
                 
                 // Buscar fecha de completado si existe
@@ -246,7 +271,7 @@ public class ProfileService {
                         detail.getTitle(),
                         detail.getTotalSeries() != null ? detail.getTotalSeries() : 0,
                         detail.getMuscles(),
-                        detail.getOrderInBlock(),
+                        detail.getSessionOrder(),
                         isCompleted,
                         completedAt
                 ));
@@ -256,8 +281,11 @@ public class ProfileService {
             }
 
             blocks.add(new ActiveRoutineBlockDto(
-                    blockNumber,
-                    blockTitle,
+                    block.getId(),
+                    block.getOrderIndex(),
+                    block.getName(),
+                    block.getDescription(),
+                    block.getDurationWeeks(),
                     sessionDtos
             ));
         }
@@ -280,23 +308,27 @@ public class ProfileService {
         );
     }
 
+
     /**
      * Reordena las sesiones dentro de un bloque de la rutina activa del usuario
      */
     @Transactional
-    public void reorderSessions(User user, Long routineId, Integer blockNumber, List<Long> sessionIds) {
+    public void reorderSessions(User user, Long routineId, Long blockId, List<Long> sessionIds) {
         // Verificar que el usuario tiene esta rutina activa
         RoutineTemplate currentRoutine = user.getCurrentRoutine();
         if (currentRoutine == null || !currentRoutine.getId().equals(routineId)) {
             throw new NotFoundException("No tienes esta rutina activa");
         }
 
+        // Obtener el bloque verificando que pertenece a la rutina
+        RoutineBlock block = routineBlockRepo.findByIdAndRoutine_Id(blockId, routineId)
+                .orElseThrow(() -> new NotFoundException("Bloque no encontrado"));
+
         // Obtener las sesiones del bloque
-        List<RoutineDetail> sessions = routineDetailRepo
-                .findByRoutine_IdAndBlockNumberOrderByOrderInBlockAsc(routineId, blockNumber);
+        List<RoutineDetail> sessions = block.getSessions();
 
         if (sessions.isEmpty()) {
-            throw new NotFoundException("Bloque no encontrado");
+            throw new NotFoundException("El bloque no tiene sesiones");
         }
 
         // Verificar que todos los IDs enviados corresponden a sesiones del bloque
@@ -313,7 +345,7 @@ public class ProfileService {
         int newOrder = 1;
         for (Long sessionId : sessionIds) {
             RoutineDetail session = sessionMap.get(sessionId);
-            session.setOrderInBlock(newOrder);
+            session.setSessionOrder(newOrder);
             routineDetailRepo.save(session);
             newOrder++;
         }

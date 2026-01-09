@@ -6,15 +6,13 @@ import com.example.ironplan.model.WorkoutSession;
 import com.example.ironplan.model.WorkoutSet;
 import com.example.ironplan.repository.WorkoutExerciseRepository;
 import com.example.ironplan.repository.WorkoutSetRepository;
-import com.example.ironplan.rest.dto.ReorderNextExercisesRequest;
-import com.example.ironplan.rest.dto.StartWorkoutRequest;
-import com.example.ironplan.rest.dto.WorkoutExerciseDetailResponse;
-import com.example.ironplan.rest.dto.WorkoutSessionSummaryResponse;
+import com.example.ironplan.rest.dto.*;
 import com.example.ironplan.rest.mapper.WorkoutExerciseViewMapper;
 import com.example.ironplan.rest.error.NotFoundException;
 import com.example.ironplan.service.WorkoutExerciseService;
 import com.example.ironplan.service.WorkoutSessionService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -61,12 +59,20 @@ public class WorkoutController {
                         "La sesión no tiene ejercicios configurados."
                 ));
 
-        // última serie completada (no habrá al inicio, pero dejamos la lógica lista)
+        // última serie completada
+        Long catalogExerciseId = firstExercise.getRoutineExercise().getExercise().getId();
+
         WorkoutSet previousSet = workoutSetRepo
-                .findFirstByWorkoutExercise_IdAndCompletedIsTrueOrderBySetNumberDesc(
-                        firstExercise.getId()
+                .findLastCompletedSetForUserAndExercise(
+                        user.getId(),
+                        catalogExerciseId,
+                        PageRequest.of(0, 1)
                 )
+                .stream()
+                .findFirst()
                 .orElse(null);
+
+
 
         WorkoutExerciseDetailResponse response =
                 WorkoutExerciseViewMapper.toDetailResponse(session, firstExercise, previousSet);
@@ -89,17 +95,40 @@ public class WorkoutController {
                 .getExerciseForUserByOrder(sessionId, user.getId(), order);
 
         // última serie completada de ese ejercicio (para "serie anterior")
+        Long catalogExerciseId = exercise.getRoutineExercise().getExercise().getId();
+
         WorkoutSet previousSet = workoutSetRepo
-                .findFirstByWorkoutExercise_IdAndCompletedIsTrueOrderBySetNumberDesc(
-                        exercise.getId()
+                .findLastCompletedSetForUserAndExercise(
+                        user.getId(),
+                        catalogExerciseId,
+                        PageRequest.of(0, 1)
                 )
+                .stream()
+                .findFirst()
                 .orElse(null);
+
+
 
         WorkoutExerciseDetailResponse response =
                 WorkoutExerciseViewMapper.toDetailResponse(session, exercise, previousSet);
 
         return ResponseEntity.ok(response);
     }
+
+    // SALTAR SESIÓN (la marca como CANCELLED y avanza el progreso de rutina)
+    @PostMapping("/skip")
+    public ResponseEntity<SkipWorkoutResponse> skipWorkout(
+            @AuthenticationPrincipal User user,
+            @RequestBody @Valid StartWorkoutRequest request
+    ) {
+        WorkoutSession session = workoutSessionService.skipSession(
+                user.getId(),
+                request.routineDetailId()
+        );
+
+        return ResponseEntity.ok(new SkipWorkoutResponse(session.getId(), "Sesión saltada"));
+    }
+
 
 
     @PatchMapping("/sessions/{sessionId}/exercises/reorder-next")
@@ -127,6 +156,35 @@ public class WorkoutController {
                 user.getId()
         );
         return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/{sessionId}/detail")
+    public ResponseEntity<WorkoutSessionDetailResponse> getSessionDetail(
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal User user
+    ) {
+        var detail = workoutSessionService.getSessionDetail(sessionId, user.getId());
+        return ResponseEntity.ok(detail);
+    }
+
+    // DESCARTAR SESIÓN (elimina todo el progreso y marca como CANCELLED)
+    @PostMapping("/{sessionId}/discard")
+    public ResponseEntity<Void> discardSession(
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal User user
+    ) {
+        workoutSessionService.discardSession(sessionId, user.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    // FINALIZAR SESIÓN (guarda el progreso actual y marca como COMPLETED)
+    @PostMapping("/{sessionId}/finish")
+    public ResponseEntity<Void> finishSession(
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal User user
+    ) {
+        workoutSessionService.finishSession(sessionId, user.getId());
+        return ResponseEntity.noContent().build();
     }
 
 }

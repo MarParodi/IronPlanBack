@@ -2,6 +2,7 @@ package com.example.ironplan.rest.dto;
 
 import com.example.ironplan.model.Goal;
 import com.example.ironplan.model.Level;
+import com.example.ironplan.model.RoutineGender;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
@@ -33,12 +34,14 @@ public record CreateRoutineRequest(
         @Max(value = 52, message = "Máximo 52 semanas de duración")
         int durationWeeks,
 
+        @NotNull(message = "El Género es requerido")
+        RoutineGender  routineGender,
+
         String img,
 
         boolean isPublic,
 
         @Valid
-        @NotEmpty(message = "Debe incluir al menos una sesión")
-        List<CreateSessionRequest> sessions
+        @NotEmpty(message = "Debe incluir al menos un bloque")
+        List<CreateBlockRequest> blocks
 ) {}
-

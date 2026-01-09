@@ -12,5 +12,6 @@ public record ProfileHeaderDto(
         int lifetimeXp,
         String xpRankCode,      // NOVATO_II
         String xpRankLabel,     // "Novato II"
-        LocalDateTime joinedAt
+        LocalDateTime joinedAt,
+        String profilePictureUrl
 ) {}

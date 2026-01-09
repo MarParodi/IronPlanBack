@@ -20,16 +20,9 @@ public record CreateSessionRequest(
         String description,
 
         @Min(1)
-        int blockNumber,
-
-        @NotBlank
-        String blockLabel,
-
-        @Min(1)
-        int orderInBlock,
+        int sessionOrder,
 
         @Valid
         @NotEmpty(message = "La sesión debe tener al menos un ejercicio")
         List<CreateExerciseRequest> exercises
 ) {}
-

@@ -17,5 +17,8 @@ public record MeResponse(
         Level level,
         Integer trainDays,
         Gender gender,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String profilePictureUrl,
+        Integer weight,
+        Integer height
 ) {}

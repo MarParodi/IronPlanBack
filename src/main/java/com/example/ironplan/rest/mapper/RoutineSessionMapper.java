@@ -25,7 +25,8 @@ public final class RoutineSessionMapper {
                 e.getRepsMin(),
                 e.getRepsMax(),
                 e.getRir(),
-                e.getRestMinutes()
+                e.getRestMinutes(),
+                e.getExercise().getInstructions()
         );
     }
 
@@ -39,9 +40,15 @@ public final class RoutineSessionMapper {
                 .map(RoutineSessionMapper::toExerciseDto)
                 .toList();
 
+        // Obtener el routineId a través del bloque
+        Long routineId = null;
+        if (d.getBlock() != null && d.getBlock().getRoutine() != null) {
+            routineId = d.getBlock().getRoutine().getId();
+        }
+
         return new RoutineSessionDetailDto(
                 d.getId(),
-                d.getRoutine() != null ? d.getRoutine().getId() : null,
+                routineId,
                 d.getTitle(),
                 d.getIcon(),
                 d.getMuscles(),
