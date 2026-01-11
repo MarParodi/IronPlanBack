@@ -86,6 +86,10 @@ public class WorkoutController {
             @AuthenticationPrincipal User user,
             @RequestBody @Valid StartCustomWorkoutRequest request
     ) {
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        
         WorkoutSession session = workoutSessionService.startCustomSession(
                 user.getId(),
                 request

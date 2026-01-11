@@ -45,8 +45,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         SecurityContextHolder.getContext().setAuthentication(authentication);
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
                 // token inválido/expirado → dejamos pasar sin auth; Security dirá 401 en endpoints protegidos
+                System.err.println("[JwtAuthFilter] Error procesando token: " + e.getMessage());
             }
         }
 
