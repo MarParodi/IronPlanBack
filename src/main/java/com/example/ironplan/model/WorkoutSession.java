@@ -31,7 +31,7 @@ public class WorkoutSession {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "routine_detail_id", nullable = false)
+    @JoinColumn(name = "routine_detail_id", nullable = true)
     private RoutineDetail routineDetail;
 
     @Enumerated(EnumType.STRING)
