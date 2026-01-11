@@ -38,7 +38,7 @@ public class WorkoutController {
         this.workoutSetRepo = workoutSetRepo;
     }
 
-    // 1) INICIAR SESIÓN DE ENTRENAMIENTO
+    // 1) INICIAR SESIÓN DE ENTRENAMIENTO (desde rutina)
     @PostMapping("/start")
     public ResponseEntity<WorkoutExerciseDetailResponse> startWorkout(
             @AuthenticationPrincipal User user,
@@ -60,7 +60,7 @@ public class WorkoutController {
                 ));
 
         // última serie completada
-        Long catalogExerciseId = firstExercise.getRoutineExercise().getExercise().getId();
+        Long catalogExerciseId = resolveCatalogExerciseId(firstExercise);
 
         WorkoutSet previousSet = workoutSetRepo
                 .findLastCompletedSetForUserAndExercise(
@@ -80,6 +80,20 @@ public class WorkoutController {
         return ResponseEntity.ok(response);
     }
 
+    // 1.5) INICIAR SESIÓN PERSONALIZADA (sin rutina, desde catálogo)
+    @PostMapping("/custom/start")
+    public ResponseEntity<StartCustomWorkoutResponse> startCustomWorkout(
+            @AuthenticationPrincipal User user,
+            @RequestBody @Valid StartCustomWorkoutRequest request
+    ) {
+        WorkoutSession session = workoutSessionService.startCustomSession(
+                user.getId(),
+                request
+        );
+
+        return ResponseEntity.ok(new StartCustomWorkoutResponse(session.getId()));
+    }
+
     // 2) OBTENER EJERCICIO ACTUAL POR ORDEN
     @GetMapping("/{sessionId}/exercise/{order}")
     public ResponseEntity<WorkoutExerciseDetailResponse> getExerciseByOrder(
@@ -95,7 +109,7 @@ public class WorkoutController {
                 .getExerciseForUserByOrder(sessionId, user.getId(), order);
 
         // última serie completada de ese ejercicio (para "serie anterior")
-        Long catalogExerciseId = exercise.getRoutineExercise().getExercise().getId();
+        Long catalogExerciseId = resolveCatalogExerciseId(exercise);
 
         WorkoutSet previousSet = workoutSetRepo
                 .findLastCompletedSetForUserAndExercise(
@@ -186,5 +200,18 @@ public class WorkoutController {
         workoutSessionService.finishSession(sessionId, user.getId());
         return ResponseEntity.noContent().build();
     }
+    private Long resolveCatalogExerciseId(WorkoutExercise we) {
+
+        if (we.getRoutineExercise() != null && we.getRoutineExercise().getExercise() != null) {
+            return we.getRoutineExercise().getExercise().getId();
+        }
+
+        if (we.getExercise() != null) {
+            return we.getExercise().getId();
+        }
+
+        throw new NotFoundException("No se pudo determinar el ejercicio de catálogo para previous set.");
+    }
+
 
 }

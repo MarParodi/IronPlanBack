@@ -27,6 +27,7 @@ public class WorkoutSessionService {
     private final RoutineDetailRepository routineDetailRepo;
     private final UserRepository userRepo;
     private final AchievementService achievementService;
+private final ExerciseRepository exerciseRepo;
 
     public WorkoutSessionService(
             WorkoutSessionRepository sessionRepo,
@@ -34,6 +35,7 @@ public class WorkoutSessionService {
             WorkoutSetRepository workoutSetRepo,
             RoutineDetailRepository routineDetailRepo,
             UserRepository userRepo,
+            ExerciseRepository exerciseRepo,
             AchievementService achievementService
     ) {
         this.sessionRepo = sessionRepo;
@@ -42,6 +44,7 @@ public class WorkoutSessionService {
         this.routineDetailRepo = routineDetailRepo;
         this.userRepo = userRepo;
         this.achievementService = achievementService;
+        this.exerciseRepo = exerciseRepo;
     }
 
     @Transactional
@@ -116,7 +119,73 @@ public class WorkoutSessionService {
         // guardamos los ejercicios
         workoutExerciseRepo.saveAll(workoutExercises);
 
-        // 👇👇 ESTA ES LA CLAVE para que el mapper los vea
+        session.setWorkoutExercises(workoutExercises);
+
+        return session;
+    }
+
+    //metodo para sesion personalizada
+    @Transactional
+    public WorkoutSession startCustomSession(Long userId, com.example.ironplan.rest.dto.StartCustomWorkoutRequest request) {
+
+        var user = userRepo.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Usuario no encontrado: " + userId));
+
+        var session = new WorkoutSession();
+        session.setUser(user);
+        session.setRoutineDetail(null); // custom
+        session.setStatus(WorkoutSessionStatus.ACTIVE);
+        session.setStartedAt(LocalDateTime.now());
+        session.setXpEarned(0);
+        session.setCompletedExercises(0);
+        session.setProgressPercentage(0.0);
+
+        int totalExercises = request.exercises() != null ? request.exercises().size() : 0;
+        session.setTotalExercises(totalExercises);
+
+        session = sessionRepo.save(session);
+
+        // Defaults (porque planned_* son NOT NULL en tu entidad)
+        final int DEFAULT_SETS = 3;
+        final int DEFAULT_REPS_MIN = 8;
+        final int DEFAULT_REPS_MAX = 12;
+        final int DEFAULT_REST_SECONDS = 60;
+
+        var workoutExercises = new ArrayList<WorkoutExercise>();
+
+        int autoOrder = 1;
+
+        for (var item : request.exercises()) {
+
+            var catalogExercise = exerciseRepo.findById(item.exerciseId())
+                    .orElseThrow(() -> new NotFoundException("Ejercicio de catálogo no encontrado: " + item.exerciseId()));
+
+            var we = new WorkoutExercise();
+            we.setWorkoutSession(session);
+
+            // Custom: no viene de rutina
+            we.setRoutineExercise(null);
+            we.setExercise(catalogExercise);
+
+            we.setExerciseName(catalogExercise.getName() != null ? catalogExercise.getName() : "Ejercicio");
+
+            Integer order = item.orderIndex() != null ? item.orderIndex() : autoOrder++;
+            we.setExerciseOrder(order);
+
+            we.setPlannedSets(item.plannedSets() != null ? item.plannedSets() : DEFAULT_SETS);
+            we.setPlannedRepsMin(item.plannedRepsMin() != null ? item.plannedRepsMin() : DEFAULT_REPS_MIN);
+            we.setPlannedRepsMax(item.plannedRepsMax() != null ? item.plannedRepsMax() : DEFAULT_REPS_MAX);
+
+            we.setPlannedRir(item.plannedRir());
+            we.setPlannedRestSeconds(item.plannedRestSeconds() != null ? item.plannedRestSeconds() : DEFAULT_REST_SECONDS);
+
+            we.setStatus(WorkoutExerciseStatus.PENDING);
+            we.setCompletedSets(0);
+
+            workoutExercises.add(we);
+        }
+
+        workoutExerciseRepo.saveAll(workoutExercises);
         session.setWorkoutExercises(workoutExercises);
 
         return session;

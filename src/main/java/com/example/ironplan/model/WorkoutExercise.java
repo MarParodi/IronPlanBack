@@ -32,8 +32,13 @@ public class WorkoutExercise {
 
     // De qué ejercicio de plantilla viene (RoutineExercise)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "routine_exercise_id", nullable = false)
+    @JoinColumn(name = "routine_exercise_id", nullable = true)
     private RoutineExercise routineExercise;
+
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "exercise_id", nullable = true)
+    private Exercise exercise;
 
 
     @Column(name = "exercise_name", nullable = false, length = 150)
