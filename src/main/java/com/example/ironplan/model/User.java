@@ -25,6 +25,12 @@ public class User implements UserDetails {
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Column(nullable = true, length = 120)
+    private String firstName;
+
+    @Column(nullable = true, length = 120)
+    private String lastName;
+
     @Column(nullable = false)
     private String password;
 
@@ -82,6 +88,30 @@ public class User implements UserDetails {
 
     @Column(nullable = true)
     private int height;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true, length = 40)
+    private Goal goal;
+
+    // ===== Contexto organizacional (fase 1: strings, luego se normaliza a tablas) =====
+    @Column(nullable = true, length = 120)
+    private String organizationCode;
+
+    @Column(nullable = true, length = 200)
+    private String organizationGroup;
+
+    @Column(nullable = true, length = 120)
+    private String organizationRole;
+
+    // ===== Consentimientos =====
+    @Column(nullable = true)
+    private Boolean acceptedTerms;
+
+    @Column(nullable = true)
+    private Boolean acceptedPrivacy;
+
+    @Column(nullable = true)
+    private Boolean consentProgramMetrics;
 
 
     // Rutina actual del usuario (puede ser null si no tiene ninguna activa)
