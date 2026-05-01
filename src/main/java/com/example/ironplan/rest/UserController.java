@@ -1,5 +1,7 @@
 package com.example.ironplan.rest;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import com.example.ironplan.model.User;
 import com.example.ironplan.repository.UserRepository;
 import com.example.ironplan.rest.dto.MeResponse;
@@ -33,21 +35,28 @@ public class UserController {
     }
 
     @GetMapping("/me")
+    @Transactional(readOnly = true)  // ← agrega esto
     public MeResponse me(@AuthenticationPrincipal User user) {
+        // Recargar el usuario con sesión activa
+        User fullUser = userRepository.findById(user.getId()).orElse(user);
+        var group = fullUser.getPrimaryOrganizationalGroup();
+        
         return new MeResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getDisplayUsername(), // Usamos el username real
-                user.getRole(),
-                user.getBirthday(),
-                user.getXpPoints(),
-                user.getLevel(),
-                user.getTrainDays(),
-                user.getGender(),
-                user.getCreatedAt(),
-                user.getProfilePictureUrl(),
-                user.getWeight(),
-                user.getHeight()
+                fullUser.getId(),
+                fullUser.getEmail(),
+                fullUser.getDisplayUsername(),
+                fullUser.getRole(),
+                fullUser.getBirthday(),
+                fullUser.getXpPoints(),
+                fullUser.getLevel(),
+                fullUser.getTrainDays(),
+                fullUser.getGender(),
+                fullUser.getCreatedAt(),
+                fullUser.getProfilePictureUrl(),
+                fullUser.getWeight(),
+                fullUser.getHeight(),
+                group != null ? group.getId() : null,
+                group != null ? group.getName() : null
         );
     }
 

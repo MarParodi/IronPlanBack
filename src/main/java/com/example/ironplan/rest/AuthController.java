@@ -2,14 +2,22 @@ package com.example.ironplan.rest;
 
 import com.example.ironplan.rest.dto.AuthReq;
 import com.example.ironplan.rest.dto.AuthResp;
+import com.example.ironplan.rest.dto.ForgotPasswordRequest;
 import com.example.ironplan.rest.dto.RegisterReq;
 import com.example.ironplan.rest.dto.RegisterStep1Req;
 import com.example.ironplan.rest.dto.RegisterStep1Resp;
 import com.example.ironplan.rest.dto.RegisterStep2Req;
 import com.example.ironplan.rest.dto.RegisterStep3Req;
 import com.example.ironplan.rest.dto.RegisterStep4Req;
+import com.example.ironplan.rest.dto.ResetPasswordRequest;
+import com.example.ironplan.rest.dto.VerifyResetCodeRequest;
 import com.example.ironplan.service.AuthService;
+import com.example.ironplan.service.PasswordResetService;
+
 import jakarta.validation.Valid;
+
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,9 +26,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     // -------- REGISTRO --------
@@ -63,4 +73,43 @@ public class AuthController {
     public String test() {
         return "AuthController funcionando correctamente 🚀";
     }
+    
+    //Nuevo
+    
+    
+ // POST /auth/forgot-password
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest req) {
+        try {
+            passwordResetService.sendResetCode(req.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Código enviado al correo"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // POST /auth/verify-reset-code
+    @PostMapping("/verify-reset-code")
+    public ResponseEntity<?> verifyCode(@Valid @RequestBody VerifyResetCodeRequest req) {
+        try {
+            passwordResetService.verifyCode(req.getEmail(), req.getCode());
+            return ResponseEntity.ok(Map.of("message", "Código válido"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // POST /auth/reset-password
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        try {
+            passwordResetService.resetPassword(req.getEmail(), req.getCode(), req.getNewPassword());
+            return ResponseEntity.ok(Map.of("message", "Contraseña actualizada correctamente"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+    
+    
+    
 }

@@ -102,6 +102,10 @@ public class User implements UserDetails {
 
     @Column(nullable = true, length = 120)
     private String organizationRole;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "primary_organizational_group_id")
+    private OrganizationalGroup primaryOrganizationalGroup;
 
     // ===== Consentimientos =====
     @Column(nullable = true)
@@ -122,6 +126,14 @@ public class User implements UserDetails {
     // Fecha en que empezó la rutina actual
     @Column(name = "routine_started_at")
     private LocalDateTime routineStartedAt;
+    
+    //Nuevo para la tabla Users y recuper contraseña
+    @Column(nullable = true, length = 6)
+    private String resetPasswordToken;
+    
+    //Nuevo para recuperar contraseña
+    @Column(nullable = true)
+    private LocalDateTime resetTokenExpiresAt;
 
     @Override public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));

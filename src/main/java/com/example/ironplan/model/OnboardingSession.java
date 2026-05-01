@@ -76,6 +76,10 @@ public class OnboardingSession {
 
     @Column(nullable = true, length = 120)
     private String organizationRole;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "primary_organizational_group_id")
+    private OrganizationalGroup primaryOrganizationalGroup;
 
     // ===== Paso 4: Consentimientos =====
     private Boolean acceptedTerms;

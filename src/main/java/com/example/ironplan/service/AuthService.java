@@ -19,7 +19,7 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
+import com.example.ironplan.model.OrganizationalGroup;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
@@ -33,6 +33,7 @@ public class AuthService {
     private final OnboardingSessionRepository onboardingRepo;
     private final PasswordEncoder encoder;
     private final JwtService jwt;
+    private final OrganizationalInvitationService invitationService;
 
     // Leemos el mismo valor que usa JwtService para calcular expiresAt
     private final long expirationMs;
@@ -41,12 +42,14 @@ public class AuthService {
                        OnboardingSessionRepository onboardingRepo,
                        PasswordEncoder encoder,
                        JwtService jwt,
-                       @Value("${app.jwt.expirationMs}") long expirationMs) {
+                       @Value("${app.jwt.expirationMs}") long expirationMs,
+                       OrganizationalInvitationService invitationService) {
         this.userRepo = userRepo;
         this.onboardingRepo = onboardingRepo;
         this.encoder = encoder;
         this.jwt = jwt;
         this.expirationMs = expirationMs;
+        this.invitationService = invitationService;
     }
 
     // -------- REGISTRO --------
@@ -150,22 +153,17 @@ public class AuthService {
         requireStepOrder(session, 2, 3);
 
         String code = req.getOrganizationCode() != null ? req.getOrganizationCode().trim() : null;
-        String group = req.getOrganizationGroup() != null ? req.getOrganizationGroup().trim() : null;
-        String role = req.getOrganizationRole() != null ? req.getOrganizationRole().trim() : null;
 
+        // Si viene código, validar contra organizational_invitations
         if (code != null && !code.isEmpty()) {
+            OrganizationalGroup group = invitationService.validateAndUse(code);
+            // Guardar el código legible (compatibilidad con strings existentes)
             session.setOrganizationCode(code);
-        }
-        if (group != null && !group.isEmpty()) {
-            session.setOrganizationGroup(group);
-        }
-        if (role != null && !role.isEmpty()) {
-            session.setOrganizationRole(role);
+            // Guardar la FK al grupo real
+            session.setPrimaryOrganizationalGroup(group);
         }
 
-        // Marcamos que pasó por el paso 3 (aunque sea sin datos)
         session.setCompletedStep(3);
-
         onboardingRepo.save(session);
     }
 
@@ -208,6 +206,7 @@ public class AuthService {
                 .organizationCode(session.getOrganizationCode())
                 .organizationGroup(session.getOrganizationGroup())
                 .organizationRole(session.getOrganizationRole())
+                .primaryOrganizationalGroup(session.getPrimaryOrganizationalGroup())
                 .acceptedTerms(Boolean.TRUE.equals(session.getAcceptedTerms()))
                 .acceptedPrivacy(Boolean.TRUE.equals(session.getAcceptedPrivacy()))
                 .consentProgramMetrics(Boolean.TRUE.equals(session.getConsentProgramMetrics()))

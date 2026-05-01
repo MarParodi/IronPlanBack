@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# --- Personalización para el proyecto ---
+
+**/.DS_Store
+
+bin/
+out/
+
+
+.mvn/
+mvnw
+mvnw.cmd

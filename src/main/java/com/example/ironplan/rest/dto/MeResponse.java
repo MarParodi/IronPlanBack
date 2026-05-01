@@ -20,5 +20,7 @@ public record MeResponse(
         LocalDateTime createdAt,
         String profilePictureUrl,
         Integer weight,
-        Integer height
+        Integer height,
+        Long organizationalGroupId,
+        String organizationalGroupName 
 ) {}
