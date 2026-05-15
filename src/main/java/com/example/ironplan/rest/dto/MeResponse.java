@@ -6,6 +6,7 @@ import com.example.ironplan.model.Role;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record MeResponse(
         Long id,
@@ -22,5 +23,8 @@ public record MeResponse(
         Integer weight,
         Integer height,
         Long organizationalGroupId,
-        String organizationalGroupName 
+        String organizationalGroupName,
+        List<Long> ancestorGroupIds,
+        String organizationRootName,
+        String organizationMiddlePath
 ) {}

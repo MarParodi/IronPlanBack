@@ -53,6 +53,12 @@ class AdminCompetitionController {
     public ResponseEntity<CompetitionDTOs.Response> finish(@PathVariable Long id) {
         return ResponseEntity.ok(competitionService.finish(id));
     }
+    
+    @PostMapping("/{id}/recalculate")
+    public ResponseEntity<Void> recalculate(@PathVariable Long id) {
+        competitionService.recalculateScoresManual(id);
+        return ResponseEntity.ok().build();
+    }
 }
  
 // ─── Público (usuario autenticado) ────────────────────────────────────────────
@@ -120,5 +126,6 @@ class PublicCompetitionController {
     ) {
         return ResponseEntity.ok(competitionService.getGroupMembers(groupId));
     }
+    
 }
  

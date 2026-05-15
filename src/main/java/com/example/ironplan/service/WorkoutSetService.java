@@ -20,6 +20,15 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
+
+import com.example.ironplan.repository.UserActivityRepository;
+import com.example.ironplan.model.UserActivity;
+import com.example.ironplan.model.MetricType;
+import com.example.ironplan.model.User;
+
+import java.time.Duration;
+import java.time.LocalDate;
+
 @Service
 public class WorkoutSetService {
 
@@ -27,17 +36,21 @@ public class WorkoutSetService {
     private final WorkoutExerciseRepository workoutExerciseRepo;
     private final WorkoutSetRepository workoutSetRepo;
     private final XpService xpService;
+    private final UserActivityRepository activityRepository;
+
 
     public WorkoutSetService(
             WorkoutSessionRepository sessionRepo,
             WorkoutExerciseRepository workoutExerciseRepo,
             WorkoutSetRepository workoutSetRepo,
-            XpService xpService
+            XpService xpService,
+            UserActivityRepository activityRepository
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
         this.workoutSetRepo = workoutSetRepo;
         this.xpService = xpService;
+        this.activityRepository = activityRepository;
     }
 
     // ---------- HELPERS PRIVADOS ----------
@@ -180,6 +193,7 @@ public class WorkoutSetService {
         if (total > 0 && completed >= total && wasActive) {
             session.setStatus(WorkoutSessionStatus.COMPLETED);
             session.setCompletedAt(LocalDateTime.now());
+            recordUserActivity(session);
             
             // ✅ SUMAR XP AL USUARIO
             if (xpToGrant > 0) {
@@ -193,6 +207,56 @@ public class WorkoutSetService {
 
         sessionRepo.save(session);
     }
+    
+    
+    
+    private void recordUserActivity(WorkoutSession session) {
+        User user = session.getUser();
+        LocalDate today = session.getCompletedAt() != null 
+            ? session.getCompletedAt().toLocalDate() 
+            : LocalDate.now();
+
+        long durationMinutes = 0;
+        if (session.getStartedAt() != null && session.getCompletedAt() != null) {
+            durationMinutes = Duration.between(session.getStartedAt(), session.getCompletedAt()).toMinutes();
+        }
+
+        // SESSIONS — cuenta 1 por sesión completada
+        if (!activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.SESSIONS)) {
+            activityRepository.save(UserActivity.builder()
+                .user(user)
+                .activityDate(today)
+                .metricType(MetricType.SESSIONS)
+                .metricValue(1.0)
+                .sourceId(session.getId())
+                .build());
+        }
+
+        // WORKOUTS_COUNT — igual que SESSIONS (1 por entrenamiento)
+        if (!activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.WORKOUTS_COUNT)) {
+            activityRepository.save(UserActivity.builder()
+                .user(user)
+                .activityDate(today)
+                .metricType(MetricType.WORKOUTS_COUNT)
+                .metricValue(1.0)
+                .sourceId(session.getId())
+                .build());
+        }
+
+        // ACTIVE_MINUTES — minutos de duración de la sesión
+        if (durationMinutes > 0 && 
+            !activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.ACTIVE_MINUTES)) {
+            activityRepository.save(UserActivity.builder()
+                .user(user)
+                .activityDate(today)
+                .metricType(MetricType.ACTIVE_MINUTES)
+                .metricValue((double) durationMinutes)
+                .sourceId(session.getId())
+                .build());
+        }
+    }
+    
+    
 
 
 

@@ -149,21 +149,27 @@ public class CompetitionService {
  
     // ─── Público: Ranking interno del grupo del usuario ───────────────────────
  
+    @Transactional(readOnly = true)
     public List<CompetitionDTOs.InternalRankingEntry> getInternalRanking(Long competitionId, User user) {
         Competition c = findOrThrow(competitionId);
         if (c.getScopeLevel() == ScopeLevel.GRUPO)
             throw new IllegalArgumentException("Competencia individual no tiene ranking interno de grupo");
-        if (user.getPrimaryOrganizationalGroup() == null) return List.of();
- 
-        Long groupId = user.getPrimaryOrganizationalGroup().getId();
-        if (!participantRepo.existsByCompetitionIdAndGroupId(competitionId, groupId))
-            throw new IllegalArgumentException("Tu grupo no participa en esta competencia");
- 
+
+        User fullUser = userRepo.findById(user.getId()).orElse(user);
+        if (fullUser.getPrimaryOrganizationalGroup() == null) return List.of();
+
+        // Buscar qué ancestro del usuario participa en la competencia
+        Long participantGroupId = findParticipantAncestor(
+            fullUser.getPrimaryOrganizationalGroup(), competitionId
+        );
+
+        if (participantGroupId == null) return List.of(); // no lanzar error, solo retornar vacío
+
         LocalDate start = c.getStartDate();
         LocalDate end   = c.getEndDate() != null ? c.getEndDate() : LocalDate.now();
- 
+
         AtomicInteger pos = new AtomicInteger(1);
-        return activityRepo.findInternalRanking(groupId, c.getMetricType(), start, end).stream()
+        return activityRepo.findInternalRanking(participantGroupId, c.getMetricType(), start, end).stream()
             .map(r -> CompetitionDTOs.InternalRankingEntry.builder()
                 .position(pos.getAndIncrement())
                 .userId((Long) r[0])
@@ -174,22 +180,38 @@ public class CompetitionService {
                 .build())
             .collect(Collectors.toList());
     }
+
+    // Sube por la jerarquía del grupo del usuario hasta encontrar uno que participe
+    private Long findParticipantAncestor(OrganizationalGroup group, Long competitionId) {
+        OrganizationalGroup current = group;
+        int maxDepth = 5;
+        while (current != null && maxDepth-- > 0) {
+            if (participantRepo.existsByCompetitionIdAndGroupId(competitionId, current.getId())) {
+                return current.getId();
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
  
     // ─── Público: Mi score ────────────────────────────────────────────────────
  
+    @Transactional(readOnly = true)
     public CompetitionDTOs.MyScore getMyScore(Long competitionId, User user) {
+
+        User fullUser = userRepo.findById(user.getId()).orElse(user);
         Competition c = findOrThrow(competitionId);
- 
+
         // Competencia individual
         if (c.getScopeLevel() == ScopeLevel.GRUPO) {
             var myEntry = memberParticipantRepo
-                .findByCompetitionIdAndUserId(competitionId, user.getId())
+                .findByCompetitionIdAndUserId(competitionId, fullUser.getId())
                 .orElseThrow(() -> new IllegalArgumentException("No participas en esta competencia"));
- 
+
             List<CompetitionMemberParticipant> all = memberParticipantRepo.findLeaderboard(competitionId);
             int myRank = 1;
             for (CompetitionMemberParticipant p : all) {
-                if (p.getUser().getId().equals(user.getId())) break;
+                if (p.getUser().getId().equals(fullUser.getId())) break;
                 myRank++;
             }
             return CompetitionDTOs.MyScore.builder()
@@ -198,38 +220,38 @@ public class CompetitionService {
                 .isMemberCompetition(true)
                 .build();
         }
- 
+
         // Competencia grupal
-        if (user.getPrimaryOrganizationalGroup() == null)
+        if (fullUser.getPrimaryOrganizationalGroup() == null)
             throw new IllegalArgumentException("No perteneces a ningún grupo");
- 
-        Long groupId = user.getPrimaryOrganizationalGroup().getId();
+
+        Long groupId = fullUser.getPrimaryOrganizationalGroup().getId();
         List<CompetitionParticipant> leaderboard = participantRepo.findLeaderboard(competitionId);
- 
+
         int groupRank = 1;
         Double groupScore = 0.0;
         for (CompetitionParticipant p : leaderboard) {
             if (p.getGroup().getId().equals(groupId)) { groupScore = p.getGroupScore(); break; }
             groupRank++;
         }
- 
+
         LocalDate start = c.getStartDate();
         LocalDate end   = c.getEndDate() != null ? c.getEndDate() : LocalDate.now();
         List<Object[]> internalRows = activityRepo.findInternalRanking(groupId, c.getMetricType(), start, end);
- 
+
         int internalRank = 1;
         Double individualScore = 0.0;
         for (Object[] row : internalRows) {
-            if (((Long) row[0]).equals(user.getId())) { individualScore = (Double) row[5]; break; }
+            if (((Long) row[0]).equals(fullUser.getId())) { individualScore = (Double) row[5]; break; }
             internalRank++;
         }
- 
+
         return CompetitionDTOs.MyScore.builder()
             .groupRank(groupRank)
             .groupScore(groupScore)
             .internalRank(internalRank)
             .individualScore(individualScore)
-            .groupName(user.getPrimaryOrganizationalGroup().getName())
+            .groupName(fullUser.getPrimaryOrganizationalGroup().getName())
             .isMemberCompetition(false)
             .build();
     }
@@ -271,14 +293,24 @@ public class CompetitionService {
  
     // ─── Scheduler ────────────────────────────────────────────────────────────
  
+ // NUEVO - recalcula todas las activas Y cierra las expiradas
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional
-    public void closeExpiredCompetitions() {
-        List<Competition> expired = competitionRepo
-            .findByStatusAndEndDateBefore(CompetitionStatus.ACTIVE, LocalDate.now());
-        expired.forEach(c -> { recalculateScores(c); c.finish(); });
+    public void dailyCompetitionUpdate() {
+        // 1. Recalcular scores de todas las competencias ACTIVE
+        List<Competition> active = competitionRepo.findByStatus(CompetitionStatus.ACTIVE);
+        active.forEach(c -> recalculateScores(c));
+        if (!active.isEmpty()) competitionRepo.saveAll(active);
+
+        // 2. Cerrar las que ya expiraron
+        List<Competition> expired = active.stream()
+            .filter(c -> c.getEndDate() != null && c.getEndDate().isBefore(LocalDate.now()))
+            .toList();
+        expired.forEach(c -> c.finish());
         if (!expired.isEmpty()) competitionRepo.saveAll(expired);
     }
+
+    
  
     // ─── Helpers privados ─────────────────────────────────────────────────────
  
@@ -360,7 +392,7 @@ public class CompetitionService {
             List<CompetitionParticipant> participants = participantRepo.findLeaderboard(c.getId());
             int rank = 1;
             for (CompetitionParticipant p : participants) {
-                Double score = activityRepo.sumGroupScore(p.getGroup().getId(), c.getMetricType(), start, end);
+                Double score = activityRepo.sumGroupScore(p.getGroup().getId(), c.getMetricType().name(), start, end);
                 p.setGroupScore(score != null ? score : 0.0);
                 p.setRank(rank++);
                 p.setLastCalculatedAt(LocalDateTime.now());
@@ -395,4 +427,19 @@ public class CompetitionService {
             .isMemberCompetition(c.getScopeLevel() == ScopeLevel.GRUPO)
             .build();
     }
+    
+    
+    
+    
+    @Transactional
+    public void recalculateScoresManual(Long competitionId) {
+        Competition c = findOrThrow(competitionId);
+        recalculateScores(c);
+        competitionRepo.save(c);
+    }
+    
+    
+    
+    
+    
 }

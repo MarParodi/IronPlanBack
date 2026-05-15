@@ -17,6 +17,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.Map;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -35,12 +40,35 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    @Transactional(readOnly = true)  // ← agrega esto
+    @Transactional(readOnly = true)
     public MeResponse me(@AuthenticationPrincipal User user) {
-        // Recargar el usuario con sesión activa
         User fullUser = userRepository.findById(user.getId()).orElse(user);
         var group = fullUser.getPrimaryOrganizationalGroup();
-        
+
+        // Construir lista de ancestros y pathParts
+        List<Long> ancestorIds = new ArrayList<>();
+        List<String> pathParts = new ArrayList<>();
+        var current = group;
+        int maxDepth = 5;
+        while (current != null && maxDepth-- > 0) {
+            ancestorIds.add(0, current.getId());
+            pathParts.add(0, current.getName());
+            current = current.getParent();
+        }
+
+        // Extraer root, middle y group
+        String rootName = null;
+        String middlePath = null;
+
+        if (!pathParts.isEmpty()) {
+            rootName = pathParts.get(0);
+            if (pathParts.size() > 2) {
+                middlePath = String.join(" · ", pathParts.subList(1, pathParts.size() - 1));
+            } else if (pathParts.size() == 2) {
+                middlePath = null; // solo root y grupo, sin intermedios
+            }
+        }
+
         return new MeResponse(
                 fullUser.getId(),
                 fullUser.getEmail(),
@@ -56,7 +84,10 @@ public class UserController {
                 fullUser.getWeight(),
                 fullUser.getHeight(),
                 group != null ? group.getId() : null,
-                group != null ? group.getName() : null
+                group != null ? group.getName() : null,
+                ancestorIds,
+                rootName,
+                middlePath
         );
     }
 
