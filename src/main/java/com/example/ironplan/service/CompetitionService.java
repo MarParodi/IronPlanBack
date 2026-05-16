@@ -108,6 +108,15 @@ public class CompetitionService {
             .findActiveCompetitionsForGroup(user.getPrimaryOrganizationalGroup().getId())
             .stream().map(this::toResponse).collect(Collectors.toList());
     }
+    
+    private int countMembersRecursive(Long groupId) {
+        int count = userRepo.countByPrimaryOrganizationalGroupId(groupId);
+        List<OrganizationalGroup> children = groupRepo.findByParentId(groupId);
+        for (OrganizationalGroup child : children) {
+            count += countMembersRecursive(child.getId());
+        }
+        return count;
+    }
  
     // ─── Público: Leaderboard grupal ──────────────────────────────────────────
  
@@ -123,8 +132,30 @@ public class CompetitionService {
                 .groupId(p.getGroup().getId())
                 .groupName(p.getGroup().getName())
                 .groupScore(p.getGroupScore())
+                .activeMembers(countMembersRecursive(p.getGroup().getId()))
                 .build())
             .collect(Collectors.toList());
+    }
+    
+    public List<CompetitionDTOs.ScopeNodeDetail> getMembersUnderGroup(Long groupId) {
+        List<User> users = new ArrayList<>();
+        collectUsersRecursive(groupId, users);
+        return users.stream()
+            .map(u -> CompetitionDTOs.ScopeNodeDetail.builder()
+                .id(u.getId())
+                .name(u.getFirstName() + " " + u.getLastName())
+                .groupType("MEMBER")
+                .isLeaf(true)
+                .memberCount(0)
+                .children(List.of())
+                .build())
+            .collect(Collectors.toList());
+    }
+
+    private void collectUsersRecursive(Long groupId, List<User> result) {
+        result.addAll(userRepo.findByPrimaryOrganizationalGroupId(groupId));
+        groupRepo.findByParentId(groupId)
+            .forEach(child -> collectUsersRecursive(child.getId(), result));
     }
  
     // ─── Público: Leaderboard individual ─────────────────────────────────────
@@ -438,7 +469,25 @@ public class CompetitionService {
         competitionRepo.save(c);
     }
     
-    
+    @Transactional(readOnly = true)
+    public List<CompetitionDTOs.Response> getAllForUser(User user) {
+        User fullUser = userRepo.findById(user.getId()).orElse(user);
+        if (fullUser.getPrimaryOrganizationalGroup() == null) return List.of();
+        
+        Long groupId = fullUser.getPrimaryOrganizationalGroup().getId();
+        
+        // Buscar en todos los ancestros
+        List<Long> ancestorIds = new ArrayList<>();
+        var current = fullUser.getPrimaryOrganizationalGroup();
+        int maxDepth = 5;
+        while (current != null && maxDepth-- > 0) {
+            ancestorIds.add(current.getId());
+            current = current.getParent();
+        }
+        
+        return competitionRepo.findAllByParticipantGroupIds(ancestorIds)
+            .stream().map(this::toResponse).collect(Collectors.toList());
+    }
     
     
     

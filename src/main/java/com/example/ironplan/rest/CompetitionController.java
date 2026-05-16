@@ -59,6 +59,14 @@ class AdminCompetitionController {
         competitionService.recalculateScoresManual(id);
         return ResponseEntity.ok().build();
     }
+    
+    @GetMapping("/{id}/participants/{groupId}/members")
+    public ResponseEntity<List<CompetitionDTOs.ScopeNodeDetail>> getParticipantMembers(
+        @PathVariable Long id,
+        @PathVariable Long groupId
+    ) {
+        return ResponseEntity.ok(competitionService.getMembersUnderGroup(groupId));
+    }
 }
  
 // ─── Público (usuario autenticado) ────────────────────────────────────────────
@@ -125,6 +133,14 @@ class PublicCompetitionController {
         @PathVariable Long groupId
     ) {
         return ResponseEntity.ok(competitionService.getGroupMembers(groupId));
+    }
+    
+    
+    @GetMapping("/my-competitions")
+    public ResponseEntity<List<CompetitionDTOs.Response>> getMyCompetitions(
+        @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(competitionService.getAllForUser(user));
     }
     
 }

@@ -43,4 +43,15 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long> 
     	    )
     	""")
     	List<Competition> findActiveCompetitionsForGroup(@Param("groupId") Long groupId);
+    
+    
+    
+    
+    @Query("""
+    	    SELECT DISTINCT c FROM Competition c
+    	    JOIN c.participants p
+    	    WHERE p.group.id IN :groupIds
+    	    ORDER BY c.createdAt DESC
+    	""")
+    	List<Competition> findAllByParticipantGroupIds(@Param("groupIds") List<Long> groupIds);
 }
