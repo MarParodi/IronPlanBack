@@ -19,7 +19,8 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
+import com.example.ironplan.model.GroupMembershipRole;
+import com.example.ironplan.model.OrganizationalGroup;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
@@ -33,6 +34,8 @@ public class AuthService {
     private final OnboardingSessionRepository onboardingRepo;
     private final PasswordEncoder encoder;
     private final JwtService jwt;
+    private final OrganizationalInvitationService invitationService;
+    private final GroupMembershipService membershipService;
 
     // Leemos el mismo valor que usa JwtService para calcular expiresAt
     private final long expirationMs;
@@ -41,12 +44,16 @@ public class AuthService {
                        OnboardingSessionRepository onboardingRepo,
                        PasswordEncoder encoder,
                        JwtService jwt,
-                       @Value("${app.jwt.expirationMs}") long expirationMs) {
+                       @Value("${app.jwt.expirationMs}") long expirationMs,
+                       OrganizationalInvitationService invitationService,
+                       GroupMembershipService membershipService) {
         this.userRepo = userRepo;
         this.onboardingRepo = onboardingRepo;
         this.encoder = encoder;
         this.jwt = jwt;
         this.expirationMs = expirationMs;
+        this.invitationService = invitationService;
+        this.membershipService = membershipService;
     }
 
     // -------- REGISTRO --------
@@ -150,22 +157,16 @@ public class AuthService {
         requireStepOrder(session, 2, 3);
 
         String code = req.getOrganizationCode() != null ? req.getOrganizationCode().trim() : null;
-        String group = req.getOrganizationGroup() != null ? req.getOrganizationGroup().trim() : null;
-        String role = req.getOrganizationRole() != null ? req.getOrganizationRole().trim() : null;
 
+        // Si viene código, validar contra organizational_invitations
         if (code != null && !code.isEmpty()) {
+            var peek = invitationService.peekCode(code);
             session.setOrganizationCode(code);
-        }
-        if (group != null && !group.isEmpty()) {
-            session.setOrganizationGroup(group);
-        }
-        if (role != null && !role.isEmpty()) {
-            session.setOrganizationRole(role);
+            session.setPrimaryOrganizationalGroup(peek.group());
+            session.setOrganizationRole(peek.role().name());
         }
 
-        // Marcamos que pasó por el paso 3 (aunque sea sin datos)
         session.setCompletedStep(3);
-
         onboardingRepo.save(session);
     }
 
@@ -208,6 +209,7 @@ public class AuthService {
                 .organizationCode(session.getOrganizationCode())
                 .organizationGroup(session.getOrganizationGroup())
                 .organizationRole(session.getOrganizationRole())
+                .primaryOrganizationalGroup(session.getPrimaryOrganizationalGroup())
                 .acceptedTerms(Boolean.TRUE.equals(session.getAcceptedTerms()))
                 .acceptedPrivacy(Boolean.TRUE.equals(session.getAcceptedPrivacy()))
                 .consentProgramMetrics(Boolean.TRUE.equals(session.getConsentProgramMetrics()))
@@ -215,7 +217,16 @@ public class AuthService {
                 .height(session.getHeight() != null ? session.getHeight() : 0)
                 .build();
 
-        userRepo.save(user);
+        User saved = userRepo.save(user);
+
+        if (session.getPrimaryOrganizationalGroup() != null && session.getOrganizationCode() != null) {
+            var useResult = invitationService.validateAndUseWithRole(session.getOrganizationCode());
+            GroupMembershipRole role = useResult.role() != null
+                ? useResult.role()
+                : GroupMembershipRole.MEMBER;
+            membershipService.joinGroup(saved, useResult.group(), role);
+        }
+
         onboardingRepo.deleteById(session.getToken());
 
         String token = jwt.generateToken(user.getUsername(), Map.of(

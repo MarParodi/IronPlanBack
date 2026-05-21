@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Service
 public class WorkoutSessionService {
@@ -27,7 +28,9 @@ public class WorkoutSessionService {
     private final RoutineDetailRepository routineDetailRepo;
     private final UserRepository userRepo;
     private final AchievementService achievementService;
-private final ExerciseRepository exerciseRepo;
+    private final ExerciseRepository exerciseRepo;
+    private final UserActivityRepository activityRepository;
+
 
     public WorkoutSessionService(
             WorkoutSessionRepository sessionRepo,
@@ -36,7 +39,8 @@ private final ExerciseRepository exerciseRepo;
             RoutineDetailRepository routineDetailRepo,
             UserRepository userRepo,
             ExerciseRepository exerciseRepo,
-            AchievementService achievementService
+            AchievementService achievementService,
+            UserActivityRepository activityRepository
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
@@ -45,6 +49,7 @@ private final ExerciseRepository exerciseRepo;
         this.userRepo = userRepo;
         this.achievementService = achievementService;
         this.exerciseRepo = exerciseRepo;
+        this.activityRepository = activityRepository;
     }
 
     @Transactional
@@ -367,6 +372,7 @@ private final ExerciseRepository exerciseRepo;
         session.setProgressPercentage(progress);
         session.setStatus(WorkoutSessionStatus.COMPLETED);
         session.setCompletedAt(LocalDateTime.now());
+        recordUserActivity(session);
         sessionRepo.save(session);
 
         // Verificar hazañas si completó al menos un ejercicio
@@ -504,6 +510,53 @@ private final ExerciseRepository exerciseRepo;
         long minutes = (totalSeconds % 3600) / 60;
         long seconds = totalSeconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+    
+    
+    private void recordUserActivity(WorkoutSession session) {
+        User user = session.getUser();
+        LocalDate today = session.getCompletedAt() != null 
+            ? session.getCompletedAt().toLocalDate() 
+            : LocalDate.now();
+
+        long durationMinutes = 0;
+        if (session.getStartedAt() != null && session.getCompletedAt() != null) {
+            durationMinutes = Duration.between(session.getStartedAt(), session.getCompletedAt()).toMinutes();
+        }
+
+        // SESSIONS — cuenta 1 por sesión completada
+        if (!activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.SESSIONS)) {
+            activityRepository.save(UserActivity.builder()
+                .user(user)
+                .activityDate(today)
+                .metricType(MetricType.SESSIONS)
+                .metricValue(1.0)
+                .sourceId(session.getId())
+                .build());
+        }
+
+        // WORKOUTS_COUNT — igual que SESSIONS (1 por entrenamiento)
+        if (!activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.WORKOUTS_COUNT)) {
+            activityRepository.save(UserActivity.builder()
+                .user(user)
+                .activityDate(today)
+                .metricType(MetricType.WORKOUTS_COUNT)
+                .metricValue(1.0)
+                .sourceId(session.getId())
+                .build());
+        }
+
+        // ACTIVE_MINUTES — minutos de duración de la sesión
+        if (durationMinutes > 0 && 
+            !activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.ACTIVE_MINUTES)) {
+            activityRepository.save(UserActivity.builder()
+                .user(user)
+                .activityDate(today)
+                .metricType(MetricType.ACTIVE_MINUTES)
+                .metricValue((double) durationMinutes)
+                .sourceId(session.getId())
+                .build());
+        }
     }
 
 }

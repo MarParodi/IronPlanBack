@@ -1,12 +1,21 @@
 package com.example.ironplan.rest;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import com.example.ironplan.model.User;
 import com.example.ironplan.repository.UserRepository;
+import com.example.ironplan.model.OrganizationalGroup;
+import com.example.ironplan.rest.dto.JoinOrganizationDTOs;
 import com.example.ironplan.rest.dto.MeResponse;
 import com.example.ironplan.rest.dto.UserResponseDto;
 import com.example.ironplan.rest.dto.UserUpdateDTO;
 import com.example.ironplan.service.CloudinaryService;
+import com.example.ironplan.service.OrganizationalAccessService;
+import com.example.ironplan.model.GroupMembershipRole;
+import com.example.ironplan.service.GroupMembershipService;
+import com.example.ironplan.service.OrganizationalInvitationService;
 import com.example.ironplan.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,6 +24,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.Map;
+
+import java.util.ArrayList;
+import java.util.List;
+
+
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -22,32 +36,100 @@ public class UserController {
     private final UserRepository userRepository;
     private final UserService userService;
     private final CloudinaryService cloudinaryService;
+    private final OrganizationalAccessService accessService;
+    private final OrganizationalInvitationService invitationService;
+    private final GroupMembershipService membershipService;
 
     // Inyección por constructor (Práctica recomendada)
     public UserController(UserRepository userRepository,
                           UserService userService,
-                          CloudinaryService cloudinaryService) {
+                          CloudinaryService cloudinaryService,
+                          OrganizationalAccessService accessService,
+                          OrganizationalInvitationService invitationService,
+                          GroupMembershipService membershipService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.cloudinaryService = cloudinaryService;
+        this.accessService = accessService;
+        this.invitationService = invitationService;
+        this.membershipService = membershipService;
     }
 
     @GetMapping("/me")
+    @Transactional(readOnly = true)
     public MeResponse me(@AuthenticationPrincipal User user) {
+        User fullUser = userRepository.findById(user.getId()).orElse(user);
+        return buildMeResponse(fullUser);
+    }
+
+    @PostMapping("/me/organization/validate-code")
+    @Transactional(readOnly = true)
+    public ResponseEntity<JoinOrganizationDTOs.CodePreviewResponse> validateOrganizationCode(
+            @Valid @RequestBody JoinOrganizationDTOs.Request req
+    ) {
+        return ResponseEntity.ok(invitationService.previewCode(req.getCode()));
+    }
+
+    @PostMapping("/me/organization/join")
+    @Transactional
+    public MeResponse joinOrganization(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody JoinOrganizationDTOs.Request req
+    ) {
+        User fullUser = userRepository.findById(user.getId()).orElseThrow();
+        var useResult = invitationService.validateAndUseWithRole(req.getCode());
+        membershipService.joinGroup(fullUser, useResult.group(), useResult.role());
+        fullUser = userRepository.findById(user.getId()).orElseThrow();
+        fullUser.setOrganizationCode(req.getCode().trim().toUpperCase());
+        userRepository.save(fullUser);
+
+        return buildMeResponse(fullUser);
+    }
+
+    private MeResponse buildMeResponse(User fullUser) {
+        var group = fullUser.getPrimaryOrganizationalGroup();
+
+        List<Long> ancestorIds = new ArrayList<>();
+        List<String> pathParts = new ArrayList<>();
+        var current = group;
+        int maxDepth = 5;
+        while (current != null && maxDepth-- > 0) {
+            ancestorIds.add(0, current.getId());
+            pathParts.add(0, current.getName());
+            current = current.getParent();
+        }
+
+        String rootName = null;
+        String middlePath = null;
+
+        if (!pathParts.isEmpty()) {
+            rootName = pathParts.get(0);
+            if (pathParts.size() > 2) {
+                middlePath = String.join(" · ", pathParts.subList(1, pathParts.size() - 1));
+            }
+        }
+
         return new MeResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getDisplayUsername(), // Usamos el username real
-                user.getRole(),
-                user.getBirthday(),
-                user.getXpPoints(),
-                user.getLevel(),
-                user.getTrainDays(),
-                user.getGender(),
-                user.getCreatedAt(),
-                user.getProfilePictureUrl(),
-                user.getWeight(),
-                user.getHeight()
+                fullUser.getId(),
+                fullUser.getEmail(),
+                fullUser.getDisplayUsername(),
+                fullUser.getRole(),
+                fullUser.getBirthday(),
+                fullUser.getXpPoints(),
+                fullUser.getLevel(),
+                fullUser.getTrainDays(),
+                fullUser.getGender(),
+                fullUser.getCreatedAt(),
+                fullUser.getProfilePictureUrl(),
+                fullUser.getWeight(),
+                fullUser.getHeight(),
+                group != null ? group.getId() : null,
+                group != null ? group.getName() : null,
+                ancestorIds,
+                rootName,
+                middlePath,
+                accessService.canManageOrganization(fullUser),
+                accessService.hasOrganizationAccess(fullUser)
         );
     }
 
