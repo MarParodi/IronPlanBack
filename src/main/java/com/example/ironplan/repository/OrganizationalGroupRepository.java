@@ -18,6 +18,8 @@ public interface OrganizationalGroupRepository extends JpaRepository<Organizatio
     List<OrganizationalGroup> findByGroupTypeAndActive(GroupType groupType, Boolean active);
  
     List<OrganizationalGroup> findByParentId(Long parentId);
+
+    boolean existsByParentIdAndActiveTrue(Long parentId);
  
     Optional<OrganizationalGroup> findByCode(String code);
  
@@ -66,4 +68,6 @@ public interface OrganizationalGroupRepository extends JpaRepository<Organizatio
         )
     """)
     List<OrganizationalGroup> findLeafGroupsUnder(@Param("scopeId") Long scopeId);
+
+    boolean existsByCreatedBy_IdAndParentIsNull(Long userId);
 }

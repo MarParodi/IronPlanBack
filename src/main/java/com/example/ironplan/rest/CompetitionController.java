@@ -84,21 +84,31 @@ class PublicCompetitionController {
     ) {
         return ResponseEntity.ok(competitionService.getActiveForUser(user));
     }
- 
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CompetitionDTOs.CompetitionDetailView> getById(
+        @PathVariable Long id,
+        @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(competitionService.getDetailForUser(id, user));
+    }
+
     // Leaderboard grupal
     @GetMapping("/{id}/leaderboard")
     public ResponseEntity<List<CompetitionDTOs.LeaderboardEntry>> getLeaderboard(
-        @PathVariable Long id
+        @PathVariable Long id,
+        @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(competitionService.getLeaderboard(id));
+        return ResponseEntity.ok(competitionService.getLeaderboard(id, user));
     }
- 
+
     // Leaderboard individual (scopeLevel = GRUPO)
     @GetMapping("/{id}/leaderboard/members")
     public ResponseEntity<List<CompetitionDTOs.MemberLeaderboardEntry>> getMemberLeaderboard(
-        @PathVariable Long id
+        @PathVariable Long id,
+        @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(competitionService.getMemberLeaderboard(id));
+        return ResponseEntity.ok(competitionService.getMemberLeaderboard(id, user));
     }
  
     // Ranking interno del grupo del usuario

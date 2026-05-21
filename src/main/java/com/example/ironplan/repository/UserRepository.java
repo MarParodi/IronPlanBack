@@ -39,4 +39,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
         List<User> findByPrimaryOrganizationalGroupId(Long groupId);
         
         int countByPrimaryOrganizationalGroupId(Long groupId);
+
+        List<User> findByPrimaryOrganizationalGroupIdIn(List<Long> groupIds);
 }

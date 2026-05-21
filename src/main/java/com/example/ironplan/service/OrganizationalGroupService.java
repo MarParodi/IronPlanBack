@@ -26,6 +26,8 @@ public class OrganizationalGroupService {
  
     private final OrganizationalGroupRepository groupRepo;
     private final UserRepository userRepo;
+    private final OrganizationalAccessService accessService;
+    private final GroupMembershipService membershipService;
  
     // ─── Listar ───────────────────────────────────────────────
  
@@ -42,11 +44,17 @@ public class OrganizationalGroupService {
             groups = groupRepo.findAll();
         }
  
-        return groups.stream().map(this::toResponse).collect(Collectors.toList());
+        User user = accessService.getCurrentUser();
+        return groups.stream()
+            .filter(g -> accessService.canView(user, g))
+            .map(this::toResponse)
+            .collect(Collectors.toList());
     }
  
     public GroupDTOs.Response getById(Long id) {
-        return toResponse(findOrThrow(id));
+        OrganizationalGroup group = findOrThrow(id);
+        accessService.requireView(group);
+        return toResponse(group);
     }
  
     // ─── Crear ────────────────────────────────────────────────
@@ -65,6 +73,7 @@ public class OrganizationalGroupService {
         // verificamos que el padre no sea tipo GRUPO)
         if (req.getParentId() != null) {
             OrganizationalGroup parent = findOrThrow(req.getParentId());
+            accessService.requireManage(parent);
             if (parent.getGroupType() == GroupType.GRUPO) {
                 throw new IllegalArgumentException("Un GRUPO no puede tener subgrupos");
             }
@@ -91,19 +100,26 @@ public class OrganizationalGroupService {
             .organizationKind(req.getOrganizationKind())
             .build();
  
-        return toResponse(groupRepo.save(group));
+        OrganizationalGroup saved = groupRepo.save(group);
+        if (saved.getGroupType() == GroupType.EMPRESA && saved.getParent() == null) {
+            membershipService.ensureCreatorMembership(creator, saved);
+        }
+        return toResponse(saved);
     }
- 
+
     // ─── Actualizar ───────────────────────────────────────────
  
     @Transactional
     public GroupDTOs.Response update(Long id, GroupDTOs.UpdateRequest req) {
         OrganizationalGroup group = findOrThrow(id);
- 
+        accessService.requireManage(group);
+
         if (req.getName() != null)   group.setName(req.getName());
         if (req.getActive() != null) group.setActive(req.getActive());
         if (req.getParentId() != null) {
-            group.setParent(findOrThrow(req.getParentId()));
+            OrganizationalGroup newParent = findOrThrow(req.getParentId());
+            accessService.requireManage(newParent);
+            group.setParent(newParent);
         }
  
         return toResponse(groupRepo.save(group));
@@ -114,6 +130,7 @@ public class OrganizationalGroupService {
     @Transactional
     public void deactivate(Long id) {
         OrganizationalGroup group = findOrThrow(id);
+        accessService.requireManage(group);
         group.setActive(false);
         groupRepo.save(group);
     }
@@ -183,7 +200,14 @@ public class OrganizationalGroupService {
         }
 
         roots.forEach(this::propagateCounts);
-        return roots;
+
+        User user = accessService.getCurrentUser();
+        return roots.stream()
+            .filter(r -> {
+                OrganizationalGroup root = findOrThrow(r.getId());
+                return accessService.canView(user, root);
+            })
+            .collect(Collectors.toList());
     }
 
     private void propagateCounts(GroupTreeDTO node) {

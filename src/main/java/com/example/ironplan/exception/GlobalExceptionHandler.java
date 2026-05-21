@@ -88,6 +88,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(404, "NOT_FOUND", ex.getMessage()));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(400, "BAD_REQUEST", ex.getMessage()));
+    }
+
     /**
      * Cualquier otro error no manejado específicamente
      */

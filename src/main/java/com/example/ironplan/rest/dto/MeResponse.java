@@ -26,5 +26,7 @@ public record MeResponse(
         String organizationalGroupName,
         List<Long> ancestorGroupIds,
         String organizationRootName,
-        String organizationMiddlePath
+        String organizationMiddlePath,
+        boolean canManageOrganization,
+        boolean hasOrganizationAccess
 ) {}

@@ -1,5 +1,6 @@
 package com.example.ironplan.rest.dto;
 
+import com.example.ironplan.model.GroupMembershipRole;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import java.time.LocalDate;
@@ -12,6 +13,7 @@ public class InvitationDTOs {
         private String code;
         private Integer maxUses;
         private LocalDate expiresAt;
+        private GroupMembershipRole membershipRole;
     }
 
     @Getter @Setter @Builder
@@ -24,5 +26,6 @@ public class InvitationDTOs {
         private Integer usesCount;
         private LocalDate expiresAt;
         private Boolean active;
+        private GroupMembershipRole membershipRole;
     }
 }

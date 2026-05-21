@@ -33,7 +33,7 @@ public class CompetitionParticipant {
     @Builder.Default
     private Double groupScore = 0.0;
  
-    @Column
+    @Column(name = "position_rank")
     private Integer rank; // Posición en el ranking grupal
  
     @Column(name = "last_calculated_at")

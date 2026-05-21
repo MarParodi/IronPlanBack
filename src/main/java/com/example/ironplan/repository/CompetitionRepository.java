@@ -54,4 +54,36 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long> 
     	    ORDER BY c.createdAt DESC
     	""")
     	List<Competition> findAllByParticipantGroupIds(@Param("groupIds") List<Long> groupIds);
+
+    @Query("""
+        SELECT DISTINCT c FROM Competition c
+        WHERE c.status IN :statuses
+        AND (
+            c.scopeReference.id IN :groupIds
+            OR EXISTS (
+                SELECT 1 FROM CompetitionParticipant p
+                WHERE p.competition = c AND p.group.id IN :groupIds
+            )
+        )
+        ORDER BY c.createdAt DESC
+        """)
+    List<Competition> findVisibleForOrganizationalScope(
+        @Param("groupIds") List<Long> groupIds,
+        @Param("statuses") List<CompetitionStatus> statuses
+    );
+
+    @Query("""
+        SELECT c FROM Competition c
+        JOIN CompetitionMemberParticipant mp ON mp.competition = c
+        WHERE c.status = 'ACTIVE' AND mp.user.id = :userId
+        """)
+    List<Competition> findActiveMemberCompetitionsForUser(@Param("userId") Long userId);
+
+    @Query("""
+        SELECT DISTINCT c FROM Competition c
+        JOIN CompetitionMemberParticipant mp ON mp.competition = c
+        WHERE mp.user.id = :userId
+        ORDER BY c.createdAt DESC
+        """)
+    List<Competition> findAllMemberCompetitionsForUser(@Param("userId") Long userId);
 }

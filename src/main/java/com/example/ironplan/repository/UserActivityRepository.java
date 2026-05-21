@@ -69,4 +69,58 @@ public interface UserActivityRepository extends JpaRepository<UserActivity, Long
     	    @Param("startDate")  LocalDate startDate,
     	    @Param("endDate")    LocalDate endDate
     	);
+
+    @Query("""
+        SELECT COALESCE(SUM(a.metricValue), 0.0) FROM UserActivity a
+        WHERE a.user.id IN :userIds AND a.metricType = :metricType
+        AND a.activityDate BETWEEN :startDate AND :endDate
+        """)
+    Double sumMetricForUsers(
+        @Param("userIds") List<Long> userIds,
+        @Param("metricType") MetricType metricType,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    @Query("""
+        SELECT COUNT(DISTINCT a.user.id) FROM UserActivity a
+        WHERE a.user.id IN :userIds AND a.metricType = :metricType
+        AND a.activityDate BETWEEN :startDate AND :endDate AND a.metricValue > 0
+        """)
+    long countDistinctActiveUsers(
+        @Param("userIds") List<Long> userIds,
+        @Param("metricType") MetricType metricType,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    @Query("""
+        SELECT a.user.id, COALESCE(SUM(a.metricValue), 0.0)
+        FROM UserActivity a
+        WHERE a.user.id IN :userIds AND a.metricType = :metricType
+        AND a.activityDate BETWEEN :startDate AND :endDate
+        GROUP BY a.user.id
+        ORDER BY 2 DESC
+        """)
+    List<Object[]> rankUsersByMetric(
+        @Param("userIds") List<Long> userIds,
+        @Param("metricType") MetricType metricType,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    @Query("""
+        SELECT a.activityDate, COALESCE(SUM(a.metricValue), 0.0)
+        FROM UserActivity a
+        WHERE a.user.id IN :userIds AND a.metricType = :metricType
+        AND a.activityDate BETWEEN :startDate AND :endDate
+        GROUP BY a.activityDate
+        ORDER BY a.activityDate
+        """)
+    List<Object[]> sumDailyMetricForUsers(
+        @Param("userIds") List<Long> userIds,
+        @Param("metricType") MetricType metricType,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
 }

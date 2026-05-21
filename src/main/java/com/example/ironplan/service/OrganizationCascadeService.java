@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 public class OrganizationCascadeService {
  
     private final OrganizationalGroupRepository groupRepo;
+    private final OrganizationalAccessService accessService;
+    private final GroupMembershipService membershipService;
  
     // ─── Crear jerarquía completa en una sola transacción ────────────────────
  
@@ -39,10 +41,11 @@ public class OrganizationCascadeService {
             .build();
  
         groupRepo.save(root);
- 
+        membershipService.ensureCreatorMembership(creator, root);
+
         // Crear hijos en cascada
         createChildren(root, req.getChildren(), creator, 2);
- 
+
         return toNodeResponse(root);
     }
  
@@ -51,7 +54,8 @@ public class OrganizationCascadeService {
     @Transactional
     public OrganizationDTOs.NodeResponse updateOrganization(Long rootId, OrganizationDTOs.UpdateRequest req) {
         OrganizationalGroup root = findOrThrow(rootId);
- 
+        accessService.requireManage(root);
+
         root.setName(req.getName());
         if (req.getOrganizationKind() != null) {
             root.setOrganizationKind(req.getOrganizationKind());
@@ -194,6 +198,7 @@ public class OrganizationCascadeService {
     public OrganizationDTOs.NodeResponse getOrganization(Long id) {
         OrganizationalGroup group = groupRepo.findById(id)
             .orElseThrow(() -> new RuntimeException("Organización no encontrada: " + id));
+        accessService.requireView(group);
         return toNodeResponse(group);
     }
 }

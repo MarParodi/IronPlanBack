@@ -111,7 +111,8 @@ public class CompetitionDTOs {
         private Double  groupScore;
         private Integer internalRank;
         private String  groupName;
- 
+        private Long    participantGroupId;
+
         // Competencia individual
         private Integer memberRank;
         private Double  individualScore;
@@ -130,5 +131,45 @@ public class CompetitionDTOs {
         private boolean isLeaf;      // true si es nivel 4 (GRUPO)
         private int     memberCount; // solo si isLeaf = true
         private List<ScopeNodeDetail> children;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class WinnerInfo {
+        private Long   id;
+        private String name;
+        private Double score;
+        private boolean tie;
+        private String type; // GROUP | MEMBER
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class RetoSummary {
+        private Long              id;
+        private String            name;
+        private CompetitionType   competitionType;
+        private ScopeLevel        scopeLevel;
+        private MetricType        metricType;
+        private LocalDate         startDate;
+        private LocalDate         endDate;
+        private CompetitionStatus status;
+        private int               participantCount;
+        private boolean           isMemberCompetition;
+        private WinnerInfo        leader;
+        private String            metricLabel;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class CompetitionDetailView {
+        private Response competition;
+        private List<LeaderboardEntry> groupLeaderboard;
+        private List<MemberLeaderboardEntry> memberLeaderboard;
+        private List<InternalRankingEntry> internalRanking;
+        private WinnerInfo winner;
+        private MyScore myScore;
+        private String metricLabel;
+        private LocalDateTime lastCalculatedAt;
     }
 }

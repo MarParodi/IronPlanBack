@@ -34,7 +34,7 @@ public class CompetitionMemberParticipant {
     @Builder.Default
     private Double score = 0.0;
  
-    @Column
+    @Column(name = "position_rank")
     private Integer rank;
  
     @Column(name = "last_calculated_at")

@@ -38,6 +38,11 @@ public class OrganizationalInvitation {
 	    @JoinColumn(name = "created_by_user_id")
 	    private User createdBy;
 	 
+	    @Enumerated(EnumType.STRING)
+	    @Column(name = "membership_role", nullable = false, length = 20)
+	    @Builder.Default
+	    private GroupMembershipRole membershipRole = GroupMembershipRole.MEMBER;
+
 	    @Column(nullable = false)
 	    @Builder.Default
 	    private Boolean active = true;

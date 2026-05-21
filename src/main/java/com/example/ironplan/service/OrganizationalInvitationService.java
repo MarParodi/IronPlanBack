@@ -1,6 +1,8 @@
 package com.example.ironplan.service;
  
 import com.example.ironplan.rest.dto.InvitationDTOs;
+import com.example.ironplan.rest.dto.JoinOrganizationDTOs;
+import com.example.ironplan.model.GroupMembershipRole;
 import com.example.ironplan.model.OrganizationalGroup;
 import com.example.ironplan.model.OrganizationalInvitation;
 import com.example.ironplan.model.User;
@@ -21,6 +23,7 @@ public class OrganizationalInvitationService {
  
     private final OrganizationalInvitationRepository invitationRepo;
     private final OrganizationalGroupRepository groupRepo;
+    private final OrganizationalAccessService accessService;
  
     // ─── Listar ───────────────────────────────────────────────
  
@@ -37,7 +40,11 @@ public class OrganizationalInvitationService {
             list = invitationRepo.findAll();
         }
  
-        return list.stream().map(this::toResponse).collect(Collectors.toList());
+        User user = accessService.getCurrentUser();
+        return list.stream()
+            .filter(inv -> accessService.canView(user, inv.getGroup()))
+            .map(this::toResponse)
+            .collect(Collectors.toList());
     }
  
     // ─── Crear invitación para un grupo ───────────────────────
@@ -47,6 +54,8 @@ public class OrganizationalInvitationService {
         OrganizationalGroup group = groupRepo.findById(groupId)
             .orElseThrow(() -> new RuntimeException("Grupo no encontrado: " + groupId));
  
+        accessService.requireManage(group);
+
         if (!group.getActive()) {
             throw new IllegalArgumentException("No se puede crear una invitación para un grupo inactivo");
         }
@@ -62,6 +71,10 @@ public class OrganizationalInvitationService {
  
         User creator = getCurrentUser();
  
+        GroupMembershipRole role = req.getMembershipRole() != null
+            ? req.getMembershipRole()
+            : GroupMembershipRole.MEMBER;
+
         OrganizationalInvitation invitation = OrganizationalInvitation.builder()
             .code(code)
             .group(group)
@@ -70,6 +83,7 @@ public class OrganizationalInvitationService {
             .usesCount(0)
             .active(true)
             .createdBy(creator)
+            .membershipRole(role)
             .build();
  
         return toResponse(invitationRepo.save(invitation));
@@ -80,25 +94,69 @@ public class OrganizationalInvitationService {
     @Transactional
     public void deactivate(Long id) {
         OrganizationalInvitation inv = findOrThrow(id);
+        accessService.requireManage(inv.getGroup());
         inv.setActive(false);
         invitationRepo.save(inv);
     }
  
-    // ─── Validar y usar un código (flujo de registro) ─────────
- 
+    // ─── Vista previa sin consumir el código ────────────────────
+
+    @Transactional(readOnly = true)
+    public InvitationUseResult peekCode(String code) {
+        OrganizationalInvitation inv = findValidInvitation(normalizeCode(code));
+        return new InvitationUseResult(inv.getGroup(), inv.getMembershipRole());
+    }
+
+    @Transactional(readOnly = true)
+    public JoinOrganizationDTOs.CodePreviewResponse previewCode(String code) {
+        OrganizationalInvitation inv = findValidInvitation(normalizeCode(code));
+        OrganizationalGroup group = inv.getGroup();
+        OrganizationalGroup root = accessService.getRoot(group);
+
+        return JoinOrganizationDTOs.CodePreviewResponse.builder()
+            .code(inv.getCode())
+            .groupId(group.getId())
+            .groupName(group.getName())
+            .organizationRootName(root != null ? root.getName() : group.getName())
+            .membershipRole(inv.getMembershipRole().name())
+            .build();
+    }
+
+    // ─── Validar y usar un código (registro o unión posterior) ─
+
     @Transactional
     public OrganizationalGroup validateAndUse(String code) {
+        return validateAndUseWithRole(code).group();
+    }
+
+    @Transactional
+    public InvitationUseResult validateAndUseWithRole(String code) {
+        OrganizationalInvitation inv = findValidInvitation(normalizeCode(code));
+        inv.registerUse();
+        invitationRepo.save(inv);
+        return new InvitationUseResult(inv.getGroup(), inv.getMembershipRole());
+    }
+
+    public record InvitationUseResult(OrganizationalGroup group, GroupMembershipRole role) {}
+
+    private OrganizationalInvitation findValidInvitation(String code) {
         OrganizationalInvitation inv = invitationRepo.findByCode(code)
-            .orElseThrow(() -> new RuntimeException("Código de invitación inválido"));
- 
+            .orElseThrow(() -> new IllegalArgumentException("Código de invitación inválido"));
+
         if (!inv.isValid()) {
             throw new IllegalArgumentException("El código ha expirado o ya no está disponible");
         }
- 
-        inv.registerUse();
-        invitationRepo.save(inv);
- 
-        return inv.getGroup();
+        if (!inv.getGroup().getActive()) {
+            throw new IllegalArgumentException("El grupo de la invitación no está activo");
+        }
+        return inv;
+    }
+
+    private String normalizeCode(String code) {
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException("El código es obligatorio");
+        }
+        return code.trim().toUpperCase();
     }
  
     // ─── Helpers ──────────────────────────────────────────────
@@ -126,6 +184,7 @@ public class OrganizationalInvitationService {
             .usesCount(inv.getUsesCount())
             .expiresAt(inv.getExpiresAt())
             .active(inv.getActive())
+            .membershipRole(inv.getMembershipRole())
             .build();
     }
 }

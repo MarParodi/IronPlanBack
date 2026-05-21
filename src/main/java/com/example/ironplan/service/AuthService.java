@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.example.ironplan.model.GroupMembershipRole;
 import com.example.ironplan.model.OrganizationalGroup;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -34,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final JwtService jwt;
     private final OrganizationalInvitationService invitationService;
+    private final GroupMembershipService membershipService;
 
     // Leemos el mismo valor que usa JwtService para calcular expiresAt
     private final long expirationMs;
@@ -43,13 +45,15 @@ public class AuthService {
                        PasswordEncoder encoder,
                        JwtService jwt,
                        @Value("${app.jwt.expirationMs}") long expirationMs,
-                       OrganizationalInvitationService invitationService) {
+                       OrganizationalInvitationService invitationService,
+                       GroupMembershipService membershipService) {
         this.userRepo = userRepo;
         this.onboardingRepo = onboardingRepo;
         this.encoder = encoder;
         this.jwt = jwt;
         this.expirationMs = expirationMs;
         this.invitationService = invitationService;
+        this.membershipService = membershipService;
     }
 
     // -------- REGISTRO --------
@@ -156,11 +160,10 @@ public class AuthService {
 
         // Si viene código, validar contra organizational_invitations
         if (code != null && !code.isEmpty()) {
-            OrganizationalGroup group = invitationService.validateAndUse(code);
-            // Guardar el código legible (compatibilidad con strings existentes)
+            var peek = invitationService.peekCode(code);
             session.setOrganizationCode(code);
-            // Guardar la FK al grupo real
-            session.setPrimaryOrganizationalGroup(group);
+            session.setPrimaryOrganizationalGroup(peek.group());
+            session.setOrganizationRole(peek.role().name());
         }
 
         session.setCompletedStep(3);
@@ -214,7 +217,16 @@ public class AuthService {
                 .height(session.getHeight() != null ? session.getHeight() : 0)
                 .build();
 
-        userRepo.save(user);
+        User saved = userRepo.save(user);
+
+        if (session.getPrimaryOrganizationalGroup() != null && session.getOrganizationCode() != null) {
+            var useResult = invitationService.validateAndUseWithRole(session.getOrganizationCode());
+            GroupMembershipRole role = useResult.role() != null
+                ? useResult.role()
+                : GroupMembershipRole.MEMBER;
+            membershipService.joinGroup(saved, useResult.group(), role);
+        }
+
         onboardingRepo.deleteById(session.getToken());
 
         String token = jwt.generateToken(user.getUsername(), Map.of(
