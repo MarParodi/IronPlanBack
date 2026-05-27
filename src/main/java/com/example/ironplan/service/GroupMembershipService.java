@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.transaction.support.TransactionTemplate;
+
 @Service
 @RequiredArgsConstructor
 public class GroupMembershipService {
@@ -26,27 +28,30 @@ public class GroupMembershipService {
     private final OrganizationalGroupRepository groupRepo;
     private final UserRepository userRepo;
     private final OrganizationalAccessService accessService;
+    private final TransactionTemplate transactionTemplate;
 
     @PostConstruct
-    @Transactional
     public void migrateLegacyMemberships() {
-        List<User> users = userRepo.findAll();
-        for (User user : users) {
-            if (user.getPrimaryOrganizationalGroup() == null) continue;
-            OrganizationalGroup group = user.getPrimaryOrganizationalGroup();
-            if (memberRepo.existsByUserIdAndGroupIdAndActiveTrue(user.getId(), group.getId())) {
-                continue;
+        transactionTemplate.execute(status -> {
+            List<User> users = userRepo.findAll();
+            for (User user : users) {
+                if (user.getPrimaryOrganizationalGroup() == null) continue;
+                OrganizationalGroup group = user.getPrimaryOrganizationalGroup();
+                if (memberRepo.existsByUserIdAndGroupIdAndActiveTrue(user.getId(), group.getId())) {
+                    continue;
+                }
+                GroupMembershipRole role = accessService.isOrganizationCreator(user, group)
+                    ? GroupMembershipRole.ADMIN
+                    : GroupMembershipRole.MEMBER;
+                memberRepo.save(OrganizationalGroupMember.builder()
+                    .user(user)
+                    .group(group)
+                    .role(role)
+                    .active(true)
+                    .build());
             }
-            GroupMembershipRole role = accessService.isOrganizationCreator(user, group)
-                ? GroupMembershipRole.ADMIN
-                : GroupMembershipRole.MEMBER;
-            memberRepo.save(OrganizationalGroupMember.builder()
-                .user(user)
-                .group(group)
-                .role(role)
-                .active(true)
-                .build());
-        }
+            return null;
+        });
     }
 
     @Transactional
