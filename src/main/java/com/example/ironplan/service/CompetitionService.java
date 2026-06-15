@@ -72,6 +72,12 @@ public class CompetitionService {
             .orElseThrow(() -> new RuntimeException("Nodo de scope no encontrado"));
         accessService.requireManage(scopeRef);
 
+        if (req.getScopeLevel() == ScopeLevel.GRUPO && scopeRef.getGroupType() != GroupType.GRUPO) {
+            throw new IllegalArgumentException(
+                "Los retos entre miembros del mismo grupo deben crearse en un grupo hoja (tipo GRUPO). "
+                    + "Navega hasta el grupo concreto y selecciona a los miembros participantes.");
+        }
+
         Competition competition = Competition.builder()
             .name(req.getName())
             .competitionType(req.getCompetitionType())
@@ -368,7 +374,7 @@ public class CompetitionService {
                 boolean isLeaf = g.getGroupType() == GroupType.GRUPO
                     || !groupRepo.existsByParentIdAndActiveTrue(g.getId());
                 int memberCount = isLeaf
-                    ? userRepo.countByPrimaryOrganizationalGroupId(g.getId())
+                    ? (int) memberRepo.countByGroupIdAndActiveTrue(g.getId())
                     : 0;
                 return CompetitionDTOs.ScopeNodeDetail.builder()
                     .id(g.getId())
@@ -383,16 +389,41 @@ public class CompetitionService {
  
     // Miembros de un grupo para el selector de participantes individuales
     public List<CompetitionDTOs.ScopeNodeDetail> getGroupMembers(Long groupId) {
-        return userRepo.findByPrimaryOrganizationalGroupId(groupId).stream()
-            .map(u -> CompetitionDTOs.ScopeNodeDetail.builder()
-                .id(u.getId())
-                .name(u.getFirstName() + " " + u.getLastName())
-                .groupType("MEMBER")
-                .isLeaf(true)
-                .memberCount(0)
-                .children(List.of())
-                .build())
+        return memberRepo.findActiveByGroupIdWithGroup(groupId).stream()
+            .map(m -> {
+                User u = m.getUser();
+                return CompetitionDTOs.ScopeNodeDetail.builder()
+                    .id(u.getId())
+                    .name(u.getFirstName() + " " + u.getLastName())
+                    .groupType("MEMBER")
+                    .isLeaf(true)
+                    .memberCount(0)
+                    .children(List.of())
+                    .build();
+            })
             .collect(Collectors.toList());
+    }
+
+    /** Crea un reto entre miembros del mismo grupo hoja. */
+    @Transactional
+    public CompetitionDTOs.Response createIntraGroupReto(
+            Long groupId,
+            CompetitionDTOs.CreateRequest req
+    ) {
+        OrganizationalGroup group = groupRepo.findById(groupId)
+            .orElseThrow(() -> new RuntimeException("Grupo no encontrado: " + groupId));
+        if (group.getGroupType() != GroupType.GRUPO) {
+            throw new IllegalArgumentException(
+                "Los retos entre miembros solo pueden crearse en un grupo hoja (tipo GRUPO)");
+        }
+
+        req.setScopeLevel(ScopeLevel.GRUPO);
+        req.setScopeReferenceId(groupId);
+        if (req.getParticipantGroupIds() != null && !req.getParticipantGroupIds().isEmpty()) {
+            throw new IllegalArgumentException(
+                "Un reto interno no admite grupos participantes; usa participantUserIds o deja vacío para todos los miembros");
+        }
+        return create(req);
     }
  
     // ─── Scheduler ────────────────────────────────────────────────────────────
@@ -430,19 +461,46 @@ public class CompetitionService {
     }
  
     private void enrollMemberParticipants(Competition competition, Long groupId, List<Long> userIds) {
+        OrganizationalGroup scopeGroup = groupRepo.findById(groupId)
+            .orElseThrow(() -> new RuntimeException("Grupo no encontrado: " + groupId));
+
         List<User> users = (userIds != null && !userIds.isEmpty())
             ? userRepo.findAllById(userIds)
-            : userRepo.findByPrimaryOrganizationalGroupId(groupId);
- 
-        if (users.size() < 2)
-            throw new IllegalArgumentException("Se requieren al menos 2 participantes");
-        if (competition.getCompetitionType() == CompetitionType.VERSUS && users.size() != 2)
+            : resolveActiveGroupMemberUsers(groupId);
+
+        if (users.size() < 2) {
+            throw new IllegalArgumentException(
+                "Se requieren al menos 2 miembros activos en el grupo para un reto interno");
+        }
+        if (competition.getCompetitionType() == CompetitionType.VERSUS && users.size() != 2) {
             throw new IllegalArgumentException("VERSUS requiere exactamente 2 participantes");
- 
+        }
+
+        validateUsersBelongToGroup(users, scopeGroup.getId());
+
         memberParticipantRepo.saveAll(users.stream()
             .map(u -> CompetitionMemberParticipant.builder()
                 .competition(competition).user(u).score(0.0).build())
             .collect(Collectors.toList()));
+    }
+
+    private List<User> resolveActiveGroupMemberUsers(Long groupId) {
+        return memberRepo.findActiveByGroupIdWithGroup(groupId).stream()
+            .map(OrganizationalGroupMember::getUser)
+            .distinct()
+            .collect(Collectors.toList());
+    }
+
+    private void validateUsersBelongToGroup(List<User> users, Long groupId) {
+        for (User user : users) {
+            boolean belongs = memberRepo.existsByUserIdAndGroupIdAndActiveTrue(user.getId(), groupId)
+                || (user.getPrimaryOrganizationalGroup() != null
+                    && user.getPrimaryOrganizationalGroup().getId().equals(groupId));
+            if (!belongs) {
+                throw new IllegalArgumentException(
+                    "El usuario " + user.getDisplayUsername() + " no pertenece al grupo seleccionado");
+            }
+        }
     }
  
     private List<Long> resolveGroupParticipants(CompetitionDTOs.CreateRequest req, Long scopeRefId) {

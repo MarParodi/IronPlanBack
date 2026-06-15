@@ -1,5 +1,9 @@
 package com.example.ironplan.rest.dto;
 
+import com.example.ironplan.model.CompetitionType;
+import com.example.ironplan.model.MetricType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -105,5 +109,27 @@ public class GrupoDTOs {
         private long workouts;
         private long activeMinutes;
         private double score;
+    }
+
+    /** Crear un reto entre miembros del mismo grupo (scopeLevel = GRUPO). */
+    @Getter @Setter
+    public static class CreateRetoRequest {
+        @NotBlank
+        private String name;
+
+        @NotNull
+        private CompetitionType competitionType;
+
+        @NotNull
+        private MetricType metricType;
+
+        @NotNull
+        private LocalDate startDate;
+
+        /** Obligatorio para CHALLENGE; opcional para RANKING (permanente si null). */
+        private LocalDate endDate;
+
+        /** IDs de miembros del grupo. Si null o vacío, se inscriben todos los miembros activos. */
+        private List<Long> participantUserIds;
     }
 }
