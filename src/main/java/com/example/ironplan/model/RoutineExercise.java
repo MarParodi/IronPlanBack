@@ -43,10 +43,10 @@ public class RoutineExercise {
     @Column(name = "exercise_order", nullable = false)
     private Integer exerciseOrder = 1;
 
-    // Nº de series
+    // Nº de series (columna num_sets: "sets" es palabra reservada en MySQL)
     @NotNull
     @Min(1)
-    @Column(name = "sets", nullable = false)
+    @Column(name = "num_sets", nullable = false)
     private Integer sets;
 
     // Rango de reps: 7-9, 8-10, etc.

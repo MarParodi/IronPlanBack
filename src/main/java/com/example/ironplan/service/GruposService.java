@@ -1,6 +1,7 @@
 package com.example.ironplan.service;
 
 import com.example.ironplan.model.OrganizationalGroup;
+import com.example.ironplan.model.GroupType;
 import com.example.ironplan.model.User;
 import com.example.ironplan.repository.CompetitionRepository;
 import com.example.ironplan.repository.OrganizationalGroupRepository;
@@ -91,6 +92,43 @@ public class GruposService {
     public CompetitionDTOs.CompetitionDetailView getRetoDetail(Long groupId, Long competitionId, User user) {
         accessService.requireView(groupId);
         return competitionService.getDetailForUser(competitionId, user, groupId);
+    }
+
+    @Transactional
+    public CompetitionDTOs.Response createReto(Long groupId, User user, GrupoDTOs.CreateRetoRequest req) {
+        OrganizationalGroup group = groupRepo.findById(groupId)
+            .orElseThrow(() -> new RuntimeException("Grupo no encontrado: " + groupId));
+        if (!accessService.canManageGroup(user, groupId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "No tienes permiso para crear retos en este grupo");
+        }
+        if (group.getGroupType() != GroupType.GRUPO) {
+            throw new IllegalArgumentException(
+                "Los retos entre miembros del mismo grupo solo pueden crearse en un grupo hoja (tipo GRUPO)");
+        }
+
+        CompetitionDTOs.CreateRequest createReq = new CompetitionDTOs.CreateRequest();
+        createReq.setName(req.getName());
+        createReq.setCompetitionType(req.getCompetitionType());
+        createReq.setMetricType(req.getMetricType());
+        createReq.setStartDate(req.getStartDate());
+        createReq.setEndDate(req.getEndDate());
+        createReq.setParticipantUserIds(req.getParticipantUserIds());
+
+        return competitionService.createIntraGroupReto(groupId, createReq);
+    }
+
+    @Transactional
+    public CompetitionDTOs.Response activateReto(Long groupId, Long competitionId, User user) {
+        if (!accessService.canManageGroup(user, groupId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "No tienes permiso para activar retos en este grupo");
+        }
+        CompetitionDTOs.Response reto = competitionService.getById(competitionId);
+        if (!reto.isMemberCompetition() || !groupId.equals(reto.getScopeReferenceId())) {
+            throw new IllegalArgumentException("Este reto no pertenece al grupo seleccionado");
+        }
+        return competitionService.activate(competitionId);
     }
 
     @Transactional(readOnly = true)

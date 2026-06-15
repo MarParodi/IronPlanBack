@@ -4,6 +4,7 @@ import com.example.ironplan.model.User;
 import com.example.ironplan.rest.dto.CompetitionDTOs;
 import com.example.ironplan.rest.dto.GrupoDTOs;
 import com.example.ironplan.service.GruposService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -88,6 +89,24 @@ public class GruposController {
             @PathVariable Long competitionId
     ) {
         return ResponseEntity.ok(gruposService.getRetoDetail(groupId, competitionId, user));
+    }
+
+    @PostMapping("/{groupId}/retos")
+    public ResponseEntity<CompetitionDTOs.Response> crearReto(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long groupId,
+            @Valid @RequestBody GrupoDTOs.CreateRetoRequest req
+    ) {
+        return ResponseEntity.ok(gruposService.createReto(groupId, user, req));
+    }
+
+    @PostMapping("/{groupId}/retos/{competitionId}/activate")
+    public ResponseEntity<CompetitionDTOs.Response> activarReto(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long groupId,
+            @PathVariable Long competitionId
+    ) {
+        return ResponseEntity.ok(gruposService.activateReto(groupId, competitionId, user));
     }
 
     @GetMapping("/{groupId}/metricas")

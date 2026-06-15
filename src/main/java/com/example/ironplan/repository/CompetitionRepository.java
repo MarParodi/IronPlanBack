@@ -30,19 +30,20 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long> 
     """)
     List<Competition> findActiveByParticipantGroup(@Param("groupId") Long groupId);
  
-    // Competencias donde participa el usuario (vía su grupo)
+    // Competencias activas visibles para un grupo: grupal (como participante) o intra-grupo (scope en este nodo)
     @Query("""
-    	    SELECT c FROM Competition c
-    	    JOIN c.participants p
-    	    WHERE c.status = 'ACTIVE'
-    	    AND (
-    	        p.group.id = :groupId
-    	        OR p.group.id = (SELECT g.parent.id FROM OrganizationalGroup g WHERE g.id = :groupId)
-    	        OR p.group.id = (SELECT g.parent.parent.id FROM OrganizationalGroup g WHERE g.id = :groupId)
-    	        OR p.group.id = (SELECT g.parent.parent.parent.id FROM OrganizationalGroup g WHERE g.id = :groupId)
-    	    )
-    	""")
-    	List<Competition> findActiveCompetitionsForGroup(@Param("groupId") Long groupId);
+        SELECT DISTINCT c FROM Competition c
+        LEFT JOIN c.participants p
+        WHERE c.status = 'ACTIVE'
+        AND (
+            p.group.id = :groupId
+            OR p.group.id = (SELECT g.parent.id FROM OrganizationalGroup g WHERE g.id = :groupId)
+            OR p.group.id = (SELECT g.parent.parent.id FROM OrganizationalGroup g WHERE g.id = :groupId)
+            OR p.group.id = (SELECT g.parent.parent.parent.id FROM OrganizationalGroup g WHERE g.id = :groupId)
+            OR (c.scopeLevel = com.example.ironplan.model.ScopeLevel.GRUPO AND c.scopeReference.id = :groupId)
+        )
+        """)
+    List<Competition> findActiveCompetitionsForGroup(@Param("groupId") Long groupId);
     
     
     
@@ -63,6 +64,14 @@ public interface CompetitionRepository extends JpaRepository<Competition, Long> 
             OR EXISTS (
                 SELECT 1 FROM CompetitionParticipant p
                 WHERE p.competition = c AND p.group.id IN :groupIds
+            )
+            OR (
+                c.scopeLevel = com.example.ironplan.model.ScopeLevel.GRUPO
+                AND EXISTS (
+                    SELECT 1 FROM CompetitionMemberParticipant mp
+                    JOIN OrganizationalGroupMember m ON m.user = mp.user AND m.active = true
+                    WHERE mp.competition = c AND m.group.id IN :groupIds
+                )
             )
         )
         ORDER BY c.createdAt DESC
