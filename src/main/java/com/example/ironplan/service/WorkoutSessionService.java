@@ -107,12 +107,7 @@ public class WorkoutSessionService {
                 we.setExerciseName(displayName != null ? displayName : "Ejercicio");
 
                 we.setExerciseOrder(re.getExerciseOrder());
-                we.setPlannedSets(re.getSets());
-                we.setPlannedRepsMin(re.getRepsMin());
-                we.setPlannedRepsMax(re.getRepsMax());
-                we.setPlannedRir(re.getRir());
-                // si re.getRestMinutes() son minutos, aquí probablemente quieres * 60
-                we.setPlannedRestSeconds(re.getRestMinutes());
+                applyPlannedFromRoutine(we, re);
 
                 we.setStatus(WorkoutExerciseStatus.PENDING);
                 we.setCompletedSets(0);
@@ -510,6 +505,29 @@ public class WorkoutSessionService {
         long minutes = (totalSeconds % 3600) / 60;
         long seconds = totalSeconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    private static final int DEFAULT_SETS = 3;
+    private static final int DEFAULT_REPS_MIN = 8;
+    private static final int DEFAULT_REPS_MAX = 12;
+    private static final int DEFAULT_REST_SECONDS = 60;
+
+    private void applyPlannedFromRoutine(WorkoutExercise we, RoutineExercise re) {
+        we.setPlannedSets(normalizeAtLeastOne(re.getSets(), DEFAULT_SETS));
+        we.setPlannedRepsMin(normalizeAtLeastOne(re.getRepsMin(), DEFAULT_REPS_MIN));
+        we.setPlannedRepsMax(normalizeAtLeastOne(re.getRepsMax(), DEFAULT_REPS_MAX));
+        we.setPlannedRir(re.getRir());
+
+        Integer restMinutes = re.getRestMinutes();
+        we.setPlannedRestSeconds(
+                restMinutes != null && restMinutes > 0
+                        ? restMinutes * 60
+                        : DEFAULT_REST_SECONDS
+        );
+    }
+
+    private static int normalizeAtLeastOne(Integer value, int defaultValue) {
+        return value != null && value >= 1 ? value : defaultValue;
     }
     
     
