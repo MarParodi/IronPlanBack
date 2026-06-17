@@ -37,7 +37,8 @@ EXPOSE 8080
 
 # Variables de entorno por defecto
 ENV SPRING_PROFILES_ACTIVE=prod
-ENV JAVA_OPTS="-Xmx512m -Xms256m"
+# Limita la RAM total de la JVM (~512 MB), no solo el heap
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAM=512m -XX:MaxRAMPercentage=75.0"
 
 # Comando de inicio
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
