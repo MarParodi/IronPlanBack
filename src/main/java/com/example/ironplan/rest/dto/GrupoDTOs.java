@@ -89,6 +89,14 @@ public class GrupoDTOs {
         private double avgWorkoutsPerActiveMember;
         private List<WeeklyMetricPoint> weeklyWorkouts;
         private List<ParticipantMetricRank> topParticipants;
+        private List<ObjectiveDistributionPoint> objectiveDistribution;
+    }
+
+    @Getter @Setter @Builder
+    public static class ObjectiveDistributionPoint {
+        private String objective;
+        private String label;
+        private long count;
     }
 
     @Getter @Setter @Builder

@@ -3,6 +3,7 @@ package com.example.ironplan.rest;
 import com.example.ironplan.model.User;
 import com.example.ironplan.model.CompetitionStatus;
 import com.example.ironplan.model.CompetitionType;
+import com.example.ironplan.model.Level;
 import com.example.ironplan.rest.dto.CompetitionDTOs;
 import com.example.ironplan.service.CompetitionService;
 import jakarta.validation.Valid;
@@ -106,9 +107,10 @@ class PublicCompetitionController {
     @GetMapping("/{id}/leaderboard/members")
     public ResponseEntity<List<CompetitionDTOs.MemberLeaderboardEntry>> getMemberLeaderboard(
         @PathVariable Long id,
+        @RequestParam(required = false) Level level,
         @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(competitionService.getMemberLeaderboard(id, user));
+        return ResponseEntity.ok(competitionService.getMemberLeaderboard(id, user, level));
     }
  
     // Ranking interno del grupo del usuario

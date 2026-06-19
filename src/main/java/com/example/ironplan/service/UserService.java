@@ -53,6 +53,24 @@ public class UserService {
             user.setHeight(dto.getHeight());
         }
 
+        if (dto.getGoal() != null) {
+            user.setGoal(dto.getGoal());
+        }
+
+        if (dto.getPersonalObjective() != null) {
+            user.setPersonalObjective(dto.getPersonalObjective());
+        }
+
+        if (dto.getPersonalObjectiveOther() != null) {
+            user.setPersonalObjectiveOther(
+                    dto.getPersonalObjectiveOther().isBlank() ? null : dto.getPersonalObjectiveOther().trim()
+            );
+        }
+
+        if (dto.getWeightUnit() != null) {
+            user.setWeightUnit(dto.getWeightUnit());
+        }
+
         // =====================
         // 🔐 PASSWORD (AISLADO)
         // =====================

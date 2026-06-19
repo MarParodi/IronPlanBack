@@ -204,6 +204,50 @@ public class WorkoutController {
         workoutSessionService.finishSession(sessionId, user.getId());
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{sessionId}/exercises")
+    public ResponseEntity<Long> addExercise(
+            @PathVariable Long sessionId,
+            @RequestBody AddExerciseToSessionRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        WorkoutExercise we = workoutSessionService.addExerciseToSession(
+                sessionId, user.getId(), request.exerciseId(),
+                request.plannedSets(), request.plannedRepsMin(), request.plannedRepsMax()
+        );
+        return ResponseEntity.ok(we.getId());
+    }
+
+    @DeleteMapping("/{sessionId}/exercises/{workoutExerciseId}")
+    public ResponseEntity<Void> removeExercise(
+            @PathVariable Long sessionId,
+            @PathVariable Long workoutExerciseId,
+            @AuthenticationPrincipal User user
+    ) {
+        workoutSessionService.removeExerciseFromSession(sessionId, user.getId(), workoutExerciseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{sessionId}/exercises/{workoutExerciseId}/sets/add")
+    public ResponseEntity<Integer> addPlannedSet(
+            @PathVariable Long sessionId,
+            @PathVariable Long workoutExerciseId,
+            @AuthenticationPrincipal User user
+    ) {
+        WorkoutExercise we = workoutSessionService.incrementPlannedSets(sessionId, user.getId(), workoutExerciseId);
+        return ResponseEntity.ok(we.getPlannedSets());
+    }
+
+    @PostMapping("/{sessionId}/exercises/{workoutExerciseId}/sets/remove")
+    public ResponseEntity<Integer> removePlannedSet(
+            @PathVariable Long sessionId,
+            @PathVariable Long workoutExerciseId,
+            @AuthenticationPrincipal User user
+    ) {
+        WorkoutExercise we = workoutSessionService.decrementPlannedSets(sessionId, user.getId(), workoutExerciseId);
+        return ResponseEntity.ok(we.getPlannedSets());
+    }
+
     private Long resolveCatalogExerciseId(WorkoutExercise we) {
 
         if (we.getRoutineExercise() != null && we.getRoutineExercise().getExercise() != null) {

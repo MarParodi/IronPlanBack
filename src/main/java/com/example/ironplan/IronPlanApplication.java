@@ -7,6 +7,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootApplication
+@org.springframework.scheduling.annotation.EnableScheduling
 public class IronPlanApplication {
 
     public static void main(String[] args) {

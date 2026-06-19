@@ -3,6 +3,7 @@ package com.example.ironplan.rest.dto;
 import com.example.ironplan.model.Gender;
 import com.example.ironplan.model.Goal;
 import com.example.ironplan.model.Level;
+import com.example.ironplan.model.PersonalObjective;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -43,5 +44,10 @@ public class RegisterStep2Req {
 
     @NotNull(message = "El objetivo es obligatorio")
     private Goal goal;
+
+    @NotNull(message = "El objetivo personal es obligatorio")
+    private PersonalObjective personalObjective;
+
+    private String personalObjectiveOther;
 }
 

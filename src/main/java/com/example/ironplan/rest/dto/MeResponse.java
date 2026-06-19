@@ -1,8 +1,11 @@
 package com.example.ironplan.rest.dto;
 
 import com.example.ironplan.model.Gender;
+import com.example.ironplan.model.Goal;
 import com.example.ironplan.model.Level;
+import com.example.ironplan.model.PersonalObjective;
 import com.example.ironplan.model.Role;
+import com.example.ironplan.model.WeightUnit;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,6 +25,10 @@ public record MeResponse(
         String profilePictureUrl,
         Integer weight,
         Integer height,
+        Goal goal,
+        PersonalObjective personalObjective,
+        String personalObjectiveOther,
+        WeightUnit weightUnit,
         Long organizationalGroupId,
         String organizationalGroupName,
         List<Long> ancestorGroupIds,
