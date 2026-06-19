@@ -61,6 +61,11 @@ public class Competition {
 	    @OneToMany(mappedBy = "competition", cascade = CascadeType.ALL, orphanRemoval = true)
 	    @Builder.Default
 	    private List<CompetitionParticipant> participants = new ArrayList<>();
+
+	    @Enumerated(EnumType.STRING)
+	    @Column(name = "participant_mode", nullable = false)
+	    @Builder.Default
+	    private ParticipantMode participantMode = ParticipantMode.GROUP;
 	 
 	    @PrePersist
 	    protected void onCreate() {

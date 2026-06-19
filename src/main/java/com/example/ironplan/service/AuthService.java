@@ -145,6 +145,8 @@ public class AuthService {
         session.setWeight(req.getWeight());
         session.setHeight(req.getHeight());
         session.setGoal(req.getGoal());
+        session.setPersonalObjective(req.getPersonalObjective());
+        session.setPersonalObjectiveOther(req.getPersonalObjectiveOther());
         session.setCompletedStep(2);
 
         onboardingRepo.save(session);
@@ -206,6 +208,8 @@ public class AuthService {
                 .trainDays(session.getTrainDays())
                 .birthday(session.getBirthday())
                 .goal(session.getGoal())
+                .personalObjective(session.getPersonalObjective())
+                .personalObjectiveOther(session.getPersonalObjectiveOther())
                 .organizationCode(session.getOrganizationCode())
                 .organizationGroup(session.getOrganizationGroup())
                 .organizationRole(session.getOrganizationRole())

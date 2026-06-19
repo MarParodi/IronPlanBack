@@ -67,6 +67,12 @@ public class OnboardingSession {
     @Enumerated(EnumType.STRING)
     private Goal goal;
 
+    @Enumerated(EnumType.STRING)
+    private PersonalObjective personalObjective;
+
+    @Column(length = 200)
+    private String personalObjectiveOther;
+
     // ===== Paso 3: Contexto organizacional =====
     @Column(nullable = true, length = 120)
     private String organizationCode;

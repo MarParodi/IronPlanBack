@@ -128,14 +128,14 @@ public class ProgressService {
                 .mapToDouble(ws -> ws.getWeightKg() * ws.getReps())
                 .sum();
 
-        // Top set global
+        // Top set global + 1RM máximo histórico (Epley)
         TopSetDto topSet = null;
-        Double estimated1RM = null;
+        Double estimated1RM = maxEstimated1RMFromSets(allSets, null);
         List<WorkoutSet> topSets = progressRepo.findTopSetForExercise(userId, exerciseId);
         if (!topSets.isEmpty()) {
             WorkoutSet ts = topSets.get(0);
             topSet = new TopSetDto(ts.getWeightKg(), ts.getReps(), ts.getCreatedAt());
-            if (ts.getWeightKg() != null && ts.getReps() != null && ts.getReps() > 0) {
+            if (estimated1RM == null && ts.getWeightKg() != null && ts.getReps() != null && ts.getReps() > 0) {
                 estimated1RM = calculate1RM(ts.getWeightKg(), ts.getReps());
             }
         }
@@ -372,9 +372,27 @@ public class ProgressService {
      * Calcula 1RM usando la fórmula de Epley: 1RM = peso * (1 + reps/30)
      */
     public static Double calculate1RM(double weight, int reps) {
+        return calculate1RM(weight, reps, null);
+    }
+
+    /**
+     * Epley con ajuste opcional por RIR: reps efectivas = reps + rir
+     */
+    public static Double calculate1RM(double weight, int reps, Integer rir) {
         if (reps <= 0 || weight <= 0) return null;
-        if (reps == 1) return weight;
-        return weight * (1 + (double) reps / 30);
+        if (reps == 1 && (rir == null || rir <= 0)) return weight;
+        int effectiveReps = reps + (rir != null && rir > 0 ? rir : 0);
+        return weight * (1 + (double) effectiveReps / 30);
+    }
+
+    public static Double maxEstimated1RMFromSets(List<WorkoutSet> sets, Integer defaultRir) {
+        return sets.stream()
+                .filter(WorkoutSet::isCompleted)
+                .filter(s -> s.getWeightKg() != null && s.getReps() != null && s.getReps() > 0)
+                .map(s -> calculate1RM(s.getWeightKg(), s.getReps(), defaultRir))
+                .filter(v -> v != null)
+                .max(Double::compare)
+                .orElse(null);
     }
 
     private List<RecentPerformanceDto> buildRecentPerformance(

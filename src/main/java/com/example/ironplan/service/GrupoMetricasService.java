@@ -1,6 +1,7 @@
 package com.example.ironplan.service;
 
 import com.example.ironplan.model.MetricType;
+import com.example.ironplan.model.PersonalObjective;
 import com.example.ironplan.model.User;
 import com.example.ironplan.repository.OrganizationalGroupMemberRepository;
 import com.example.ironplan.repository.UserActivityRepository;
@@ -65,6 +66,7 @@ public class GrupoMetricasService {
 
         List<GrupoDTOs.WeeklyMetricPoint> weekly = buildWeeklyWorkouts(userIds, end);
         List<GrupoDTOs.ParticipantMetricRank> top = buildTopParticipants(userIds, start, end);
+        List<GrupoDTOs.ObjectiveDistributionPoint> objectives = buildObjectiveDistribution(userIds);
 
         return GrupoDTOs.GroupMetrics.builder()
             .periodDays(days)
@@ -80,6 +82,7 @@ public class GrupoMetricasService {
             .avgWorkoutsPerActiveMember(avgWorkouts)
             .weeklyWorkouts(weekly)
             .topParticipants(top)
+            .objectiveDistribution(objectives)
             .build();
     }
 
@@ -154,6 +157,33 @@ public class GrupoMetricasService {
         return result;
     }
 
+    private List<GrupoDTOs.ObjectiveDistributionPoint> buildObjectiveDistribution(List<Long> userIds) {
+        if (userIds.isEmpty()) return List.of();
+        List<GrupoDTOs.ObjectiveDistributionPoint> result = new ArrayList<>();
+        for (Object[] row : userRepo.countPersonalObjectivesByUserIds(userIds)) {
+            PersonalObjective obj = (PersonalObjective) row[0];
+            long count = ((Number) row[1]).longValue();
+            result.add(GrupoDTOs.ObjectiveDistributionPoint.builder()
+                .objective(obj.name())
+                .label(objectiveLabel(obj))
+                .count(count)
+                .build());
+        }
+        return result;
+    }
+
+    private String objectiveLabel(PersonalObjective obj) {
+        return switch (obj) {
+            case BAJAR_PESO -> "Bajar de peso";
+            case RECOMPOSICION -> "Recomposición corporal";
+            case GANAR_MUSCULO -> "Ganar músculo";
+            case FUERZA -> "Progresión de fuerza";
+            case CONSTANCIA -> "Mejorar constancia";
+            case CARDIO -> "Rendimiento cardiovascular";
+            case OTRO -> "Otro";
+        };
+    }
+
     private GrupoDTOs.GroupMetrics emptyMetrics(int days, LocalDate start, LocalDate end) {
         return GrupoDTOs.GroupMetrics.builder()
             .periodDays(days)
@@ -169,6 +199,7 @@ public class GrupoMetricasService {
             .avgWorkoutsPerActiveMember(0)
             .weeklyWorkouts(List.of())
             .topParticipants(List.of())
+            .objectiveDistribution(List.of())
             .build();
     }
 }

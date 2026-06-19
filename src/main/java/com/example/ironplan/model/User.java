@@ -93,6 +93,18 @@ public class User implements UserDetails {
     @Column(nullable = true, length = 40)
     private Goal goal;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "personal_objective", nullable = true, length = 40)
+    private PersonalObjective personalObjective;
+
+    @Column(name = "personal_objective_other", nullable = true, length = 200)
+    private String personalObjectiveOther;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weight_unit", nullable = false, length = 5)
+    @Builder.Default
+    private WeightUnit weightUnit = WeightUnit.KG;
+
     // ===== Contexto organizacional (fase 1: strings, luego se normaliza a tablas) =====
     @Column(nullable = true, length = 120)
     private String organizationCode;

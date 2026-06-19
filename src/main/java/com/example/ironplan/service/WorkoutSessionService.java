@@ -423,6 +423,97 @@ public class WorkoutSessionService {
         workoutExerciseRepo.saveAll(allExercises);
     }
 
+    @Transactional
+    public WorkoutExercise addExerciseToSession(
+            Long sessionId, Long userId, Long catalogExerciseId,
+            Integer plannedSets, Integer repsMin, Integer repsMax) {
+        WorkoutSession session = getSessionForUser(sessionId, userId);
+        if (session.getStatus() != WorkoutSessionStatus.ACTIVE) {
+            throw new IllegalStateException("Solo se pueden agregar ejercicios a sesiones activas");
+        }
+
+        Exercise catalog = exerciseRepo.findById(catalogExerciseId)
+                .orElseThrow(() -> new NotFoundException("Ejercicio no encontrado: " + catalogExerciseId));
+
+        var existing = workoutExerciseRepo.findByWorkoutSession_IdOrderByExerciseOrderAsc(sessionId);
+        int nextOrder = existing.stream()
+                .map(WorkoutExercise::getExerciseOrder)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+
+        var we = new WorkoutExercise();
+        we.setWorkoutSession(session);
+        we.setExercise(catalog);
+        we.setExerciseName(catalog.getName());
+        we.setExerciseOrder(nextOrder);
+        we.setPlannedSets(plannedSets != null && plannedSets >= 1 ? plannedSets : DEFAULT_SETS);
+        we.setPlannedRepsMin(repsMin != null && repsMin >= 1 ? repsMin : DEFAULT_REPS_MIN);
+        we.setPlannedRepsMax(repsMax != null && repsMax >= 1 ? repsMax : DEFAULT_REPS_MAX);
+        we.setPlannedRestSeconds(DEFAULT_REST_SECONDS);
+        we.setStatus(WorkoutExerciseStatus.PENDING);
+        we.setCompletedSets(0);
+
+        session.setTotalExercises((session.getTotalExercises() != null ? session.getTotalExercises() : 0) + 1);
+        sessionRepo.save(session);
+
+        return workoutExerciseRepo.save(we);
+    }
+
+    @Transactional
+    public void removeExerciseFromSession(Long sessionId, Long userId, Long workoutExerciseId) {
+        WorkoutSession session = getSessionForUser(sessionId, userId);
+        if (session.getStatus() != WorkoutSessionStatus.ACTIVE) {
+            throw new IllegalStateException("Solo se pueden eliminar ejercicios de sesiones activas");
+        }
+
+        WorkoutExercise we = workoutExerciseRepo.findById(workoutExerciseId)
+                .orElseThrow(() -> new NotFoundException("Ejercicio no encontrado"));
+
+        if (!we.getWorkoutSession().getId().equals(sessionId)) {
+            throw new NotFoundException("El ejercicio no pertenece a la sesión");
+        }
+
+        workoutSetRepo.deleteAllByWorkoutExercise_Id(workoutExerciseId);
+        workoutExerciseRepo.delete(we);
+
+        int total = session.getTotalExercises() != null ? session.getTotalExercises() : 0;
+        session.setTotalExercises(Math.max(0, total - 1));
+        sessionRepo.save(session);
+    }
+
+    @Transactional
+    public WorkoutExercise incrementPlannedSets(Long sessionId, Long userId, Long workoutExerciseId) {
+        WorkoutExercise we = getWorkoutExerciseForSession(sessionId, userId, workoutExerciseId);
+        we.setPlannedSets(we.getPlannedSets() + 1);
+        return workoutExerciseRepo.save(we);
+    }
+
+    @Transactional
+    public WorkoutExercise decrementPlannedSets(Long sessionId, Long userId, Long workoutExerciseId) {
+        WorkoutExercise we = getWorkoutExerciseForSession(sessionId, userId, workoutExerciseId);
+        if (we.getPlannedSets() <= 1) {
+            throw new IllegalArgumentException("Debe haber al menos 1 serie planificada");
+        }
+        int removedSetNumber = we.getPlannedSets();
+        we.setPlannedSets(removedSetNumber - 1);
+        var sets = workoutSetRepo.findByWorkoutExercise_IdOrderBySetNumberAsc(we.getId());
+        sets.stream()
+                .filter(s -> s.getSetNumber().equals(removedSetNumber))
+                .findFirst()
+                .ifPresent(workoutSetRepo::delete);
+        return workoutExerciseRepo.save(we);
+    }
+
+    private WorkoutExercise getWorkoutExerciseForSession(Long sessionId, Long userId, Long workoutExerciseId) {
+        getSessionForUser(sessionId, userId);
+        WorkoutExercise we = workoutExerciseRepo.findById(workoutExerciseId)
+                .orElseThrow(() -> new NotFoundException("Ejercicio no encontrado"));
+        if (!we.getWorkoutSession().getId().equals(sessionId)) {
+            throw new NotFoundException("El ejercicio no pertenece a la sesión");
+        }
+        return we;
+    }
+
     /**
      * Obtiene el resumen de una sesión completada.
      */

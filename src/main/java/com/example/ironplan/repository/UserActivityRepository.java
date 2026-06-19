@@ -123,4 +123,7 @@ public interface UserActivityRepository extends JpaRepository<UserActivity, Long
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate
     );
+
+    @Query("SELECT MAX(a.activityDate) FROM UserActivity a WHERE a.user.id = :userId")
+    LocalDate findLastActivityDate(@Param("userId") Long userId);
 }

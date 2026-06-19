@@ -9,5 +9,5 @@ public record WorkoutSessionProgressDto(
         int totalExercises,
         double progressPercentage,
         int xpEarned,
-        LocalDateTime createdAt
+        LocalDateTime startedAt
 ) {}

@@ -31,6 +31,7 @@ public class CompetitionService {
     private final UserRepository                         userRepo;
     private final OrganizationalAccessService            accessService;
     private final OrganizationalGroupMemberRepository    memberRepo;
+    private final NotificationService                    notificationService;
  
     // ─── Admin: Listar ────────────────────────────────────────────────────────
  
@@ -88,16 +89,23 @@ public class CompetitionService {
             .endDate(req.getEndDate())
             .status(CompetitionStatus.DRAFT)
             .createdBy(getCurrentUser())
+            .participantMode(req.getParticipantMode() != null
+                    ? req.getParticipantMode()
+                    : ParticipantMode.GROUP)
             .build();
  
         Competition saved = competitionRepo.save(competition);
 
+        boolean orgMembers = saved.getParticipantMode() == ParticipantMode.ORGANIZATION_MEMBERS;
+ 
         boolean hasGroupParticipants = req.getParticipantGroupIds() != null
             && !req.getParticipantGroupIds().isEmpty();
         boolean hasMemberParticipants = req.getParticipantUserIds() != null
             && !req.getParticipantUserIds().isEmpty();
 
-        if (hasGroupParticipants && hasMemberParticipants) {
+        if (orgMembers) {
+            enrollOrganizationMembers(saved, scopeRef.getId(), req.getParticipantUserIds());
+        } else if (hasGroupParticipants && hasMemberParticipants) {
             throw new IllegalArgumentException(
                 "Indica solo grupos participantes o solo miembros, no ambos");
         }
@@ -180,7 +188,7 @@ public class CompetitionService {
     public List<CompetitionDTOs.LeaderboardEntry> getLeaderboard(Long competitionId, User viewer) {
         Competition c = findOrThrow(competitionId);
         if (viewer != null) requireCompetitionView(c, viewer);
-        if (c.getScopeLevel() == ScopeLevel.GRUPO)
+        if (isMemberCompetition(c))
             throw new IllegalArgumentException("Esta competencia es individual, usa /leaderboard/members");
 
         refreshScoresIfNeeded(c);
@@ -226,15 +234,22 @@ public class CompetitionService {
     }
 
     public List<CompetitionDTOs.MemberLeaderboardEntry> getMemberLeaderboard(Long competitionId, User viewer) {
+        return getMemberLeaderboard(competitionId, viewer, null);
+    }
+
+    public List<CompetitionDTOs.MemberLeaderboardEntry> getMemberLeaderboard(
+            Long competitionId, User viewer, Level levelFilter) {
         Competition c = findOrThrow(competitionId);
         if (viewer != null) requireCompetitionView(c, viewer);
-        if (c.getScopeLevel() != ScopeLevel.GRUPO)
+        if (!isMemberCompetition(c))
             throw new IllegalArgumentException("Esta competencia es grupal, usa /leaderboard");
 
         refreshScoresIfNeeded(c);
 
         AtomicInteger rank = new AtomicInteger(1);
         return memberParticipantRepo.findLeaderboard(competitionId).stream()
+            .map(p -> p)
+            .filter(p -> levelFilter == null || levelFilter.equals(p.getUser().getLevel()))
             .map(p -> CompetitionDTOs.MemberLeaderboardEntry.builder()
                 .rank(rank.getAndIncrement())
                 .userId(p.getUser().getId())
@@ -242,6 +257,7 @@ public class CompetitionService {
                 .username(p.getUser().getDisplayUsername())
                 .profilePictureUrl(p.getUser().getProfilePictureUrl())
                 .score(p.getScore())
+                .level(p.getUser().getLevel())
                 .build())
             .collect(Collectors.toList());
     }
@@ -252,7 +268,7 @@ public class CompetitionService {
     public List<CompetitionDTOs.InternalRankingEntry> getInternalRanking(Long competitionId, User user) {
         Competition c = findOrThrow(competitionId);
         requireCompetitionView(c, user);
-        if (c.getScopeLevel() == ScopeLevel.GRUPO)
+        if (isMemberCompetition(c))
             throw new IllegalArgumentException("Competencia individual no tiene ranking interno de grupo");
 
         refreshScoresIfNeeded(c);
@@ -294,7 +310,7 @@ public class CompetitionService {
         refreshScoresIfNeeded(c);
 
         // Competencia individual
-        if (c.getScopeLevel() == ScopeLevel.GRUPO) {
+        if (isMemberCompetition(c)) {
             var myEntry = memberParticipantRepo
                 .findByCompetitionIdAndUserId(competitionId, fullUser.getId())
                 .orElseThrow(() -> new IllegalArgumentException("No participas en esta competencia"));
@@ -460,6 +476,56 @@ public class CompetitionService {
         participantRepo.saveAll(participants);
     }
  
+    private void enrollOrganizationMembers(Competition competition, Long scopeRefId, List<Long> userIds) {
+        List<User> users = (userIds != null && !userIds.isEmpty())
+            ? userRepo.findAllById(userIds)
+            : collectUsersUnderScope(scopeRefId);
+
+        if (users.size() < 2) {
+            throw new IllegalArgumentException(
+                "Se requieren al menos 2 miembros en la organización para el ranking individual");
+        }
+
+        memberParticipantRepo.saveAll(users.stream()
+            .map(u -> CompetitionMemberParticipant.builder()
+                .competition(competition).user(u).score(0.0).build())
+            .collect(Collectors.toList()));
+    }
+
+    private List<User> collectUsersUnderScope(Long scopeRefId) {
+        List<User> result = new ArrayList<>();
+        collectUsersRecursive(scopeRefId, result);
+        return result.stream().distinct().toList();
+    }
+
+    private boolean isMemberCompetition(Competition c) {
+        return c.getScopeLevel() == ScopeLevel.GRUPO
+            || c.getParticipantMode() == ParticipantMode.ORGANIZATION_MEMBERS;
+    }
+
+    private void notifyRankChange(User user, String competitionName, Integer previousRank, int newRank) {
+        if (previousRank == null || previousRank.equals(newRank)) return;
+        if (newRank < previousRank) {
+            notificationService.createNotification(
+                    user,
+                    NotificationType.SUCCESS,
+                    NotificationPriority.HIGH,
+                    "¡Subiste en el ranking!",
+                    String.format("¡Subiste al %d.° lugar en '%s'! Sigue así.", newRank, competitionName),
+                    "/competitions"
+            );
+        } else {
+            notificationService.createNotification(
+                    user,
+                    NotificationType.INFO,
+                    NotificationPriority.MEDIUM,
+                    "Te adelantaron en el ranking",
+                    String.format("Alguien te adelantó en '%s'. ¡Registra tu sesión de hoy!", competitionName),
+                    "/competitions"
+            );
+        }
+    }
+
     private void enrollMemberParticipants(Competition competition, Long groupId, List<Long> userIds) {
         OrganizationalGroup scopeGroup = groupRepo.findById(groupId)
             .orElseThrow(() -> new RuntimeException("Grupo no encontrado: " + groupId));
@@ -540,13 +606,18 @@ public class CompetitionService {
         LocalDate start = c.getStartDate();
         LocalDate end   = effectiveEndDate(c);
  
-        if (c.getScopeLevel() == ScopeLevel.GRUPO) {
+        if (isMemberCompetition(c)) {
             List<CompetitionMemberParticipant> members = memberParticipantRepo.findLeaderboard(c.getId());
+            Map<Long, Integer> previousRanks = members.stream()
+                .filter(p -> p.getRank() != null)
+                .collect(Collectors.toMap(p -> p.getUser().getId(), CompetitionMemberParticipant::getRank));
             int rank = 1;
             for (CompetitionMemberParticipant p : members) {
                 Double score = activityRepo.sumUserScore(p.getUser().getId(), c.getMetricType(), start, end);
                 p.setScore(score != null ? score : 0.0);
-                p.setRank(rank++);
+                p.setRank(rank);
+                notifyRankChange(p.getUser(), c.getName(), previousRanks.get(p.getUser().getId()), rank);
+                rank++;
                 p.setLastCalculatedAt(LocalDateTime.now());
             }
             memberParticipantRepo.saveAll(members);
@@ -667,7 +738,7 @@ public class CompetitionService {
 
     private CompetitionDTOs.RetoSummary toRetoSummary(Competition c) {
         CompetitionDTOs.WinnerInfo leader = null;
-        if (c.getScopeLevel() == ScopeLevel.GRUPO) {
+        if (isMemberCompetition(c)) {
             List<CompetitionDTOs.MemberLeaderboardEntry> lb = memberParticipantRepo.findLeaderboard(c.getId()).stream()
                 .map(p -> CompetitionDTOs.MemberLeaderboardEntry.builder()
                     .userId(p.getUser().getId())
@@ -687,9 +758,7 @@ public class CompetitionService {
             leader = determineGroupWinner(c, lb);
         }
 
-        int participantCount = c.getScopeLevel() == ScopeLevel.GRUPO
-            ? (int) memberParticipantRepo.findLeaderboard(c.getId()).size()
-            : (int) participantRepo.findLeaderboard(c.getId()).size();
+        int participantCount = countParticipants(c);
 
         return CompetitionDTOs.RetoSummary.builder()
             .id(c.getId())
@@ -701,7 +770,7 @@ public class CompetitionService {
             .endDate(c.getEndDate())
             .status(c.getStatus())
             .participantCount(participantCount)
-            .isMemberCompetition(c.getScopeLevel() == ScopeLevel.GRUPO)
+            .isMemberCompetition(isMemberCompetition(c))
             .leader(leader)
             .metricLabel(metricLabel(c.getMetricType()))
             .build();
@@ -769,14 +838,18 @@ public class CompetitionService {
             case SESSIONS -> "Sesiones completadas";
             case ACTIVE_MINUTES -> "Minutos activos";
             case WORKOUTS_COUNT -> "Entrenamientos";
+            case FREE_ACTIVITY_COUNT -> "Actividades libres";
+            case FREE_ACTIVITY_KM -> "Kilómetros (actividad libre)";
         };
     }
 
-    private CompetitionDTOs.Response toResponse(Competition c) {
-        int participantCount = c.getScopeLevel() == ScopeLevel.GRUPO
+    private int countParticipants(Competition c) {
+        return isMemberCompetition(c)
             ? (int) memberParticipantRepo.findLeaderboard(c.getId()).size()
             : (int) participantRepo.findLeaderboard(c.getId()).size();
+    }
 
+    private CompetitionDTOs.Response toResponse(Competition c) {
         return CompetitionDTOs.Response.builder()
             .id(c.getId())
             .name(c.getName())
@@ -789,8 +862,9 @@ public class CompetitionService {
             .endDate(c.getEndDate())
             .status(c.getStatus())
             .createdAt(c.getCreatedAt())
-            .participantCount(participantCount)
-            .isMemberCompetition(c.getScopeLevel() == ScopeLevel.GRUPO)
+            .participantCount(countParticipants(c))
+            .isMemberCompetition(isMemberCompetition(c))
+            .participantMode(c.getParticipantMode())
             .build();
     }
     

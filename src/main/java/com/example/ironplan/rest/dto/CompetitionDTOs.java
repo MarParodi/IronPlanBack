@@ -41,6 +41,9 @@ public class CompetitionDTOs {
         // Para competencia INDIVIDUAL (scopeLevel = GRUPO):
         // IDs de usuarios participantes (null = todos los del grupo)
         private List<Long> participantUserIds;
+
+        /** GROUP = grupo vs grupo; ORGANIZATION_MEMBERS = ranking individual org-wide */
+        private ParticipantMode participantMode;
     }
  
     // ─── Response: competencia ────────────────────────────────────────────────
@@ -60,7 +63,8 @@ public class CompetitionDTOs {
         private CompetitionStatus status;
         private LocalDateTime     createdAt;
         private int               participantCount;
-        private boolean           isMemberCompetition; // true si scopeLevel = GRUPO
+        private boolean           isMemberCompetition; // true si scopeLevel = GRUPO o participantMode = ORGANIZATION_MEMBERS
+        private ParticipantMode   participantMode;
     }
  
     // ─── Response: leaderboard grupal ─────────────────────────────────────────
@@ -86,6 +90,7 @@ public class CompetitionDTOs {
         private String username;
         private String profilePictureUrl;
         private Double score;
+        private Level level;
     }
  
     // ─── Response: ranking interno (miembros dentro de un grupo) ─────────────
