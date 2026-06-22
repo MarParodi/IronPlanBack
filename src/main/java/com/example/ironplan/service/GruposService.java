@@ -141,6 +141,6 @@ public class GruposService {
     }
 
     private int countActiveCompetitions(Long groupId) {
-        return competitionRepo.findActiveCompetitionsForGroup(groupId).size();
+        return competitionService.findActiveCompetitionsVisibleFromGroup(groupId).size();
     }
 }

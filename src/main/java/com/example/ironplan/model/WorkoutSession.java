@@ -75,7 +75,7 @@ public class WorkoutSession {
         this.updatedAt = LocalDateTime.now();
     }
 
-    @OneToMany(mappedBy = "workoutSession")
+    @OneToMany(mappedBy = "workoutSession", fetch = FetchType.LAZY)
     private List<WorkoutExercise> WorkoutExercises;
 
 }

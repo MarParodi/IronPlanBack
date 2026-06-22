@@ -14,5 +14,8 @@ public record WorkoutSetItemRequest(
         Double weightKg,
 
         @NotNull
-        Boolean completed
+        Boolean completed,
+
+        @Min(0)
+        Integer rirRegistrado
 ) {}

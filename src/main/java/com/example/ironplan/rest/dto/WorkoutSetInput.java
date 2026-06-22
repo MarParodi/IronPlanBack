@@ -5,5 +5,6 @@ public record WorkoutSetInput(
         Integer setNumber,
         Integer reps,
         Double weightKg,
-        boolean completed
+        boolean completed,
+        Integer rirRegistrado
 ) {}

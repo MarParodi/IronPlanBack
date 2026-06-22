@@ -37,7 +37,7 @@ public class Competition {
 	    private OrganizationalGroup scopeReference;
 	 
 	    @Enumerated(EnumType.STRING)
-	    @Column(name = "metric_type", nullable = false)
+	    @Column(name = "metric_type", nullable = false, length = 32)
 	    private MetricType metricType;
 	 
 	    @Column(name = "start_date", nullable = false)

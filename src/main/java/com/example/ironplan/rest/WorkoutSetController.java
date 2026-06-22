@@ -55,7 +55,8 @@ public class WorkoutSetController {
                 item.setNumber(),
                 item.reps(),
                 item.weightKg(),
-                Boolean.TRUE.equals(item.completed())
+                Boolean.TRUE.equals(item.completed()),
+                item.rirRegistrado()
         );
     }
 }
