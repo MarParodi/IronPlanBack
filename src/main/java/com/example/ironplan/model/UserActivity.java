@@ -33,7 +33,7 @@ public class UserActivity {
     private LocalDate activityDate;
  
     @Enumerated(EnumType.STRING)
-    @Column(name = "metric_type", nullable = false)
+    @Column(name = "metric_type", nullable = false, length = 32)
     private MetricType metricType;
  
     @Column(name = "metric_value", nullable = false)

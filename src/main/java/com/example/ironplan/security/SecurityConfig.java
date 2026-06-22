@@ -49,6 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/workouts/**").authenticated()
                         .requestMatchers("/api/profile/**").authenticated()
                         .requestMatchers("/api/competitions/**").authenticated()
+                        .requestMatchers("/api/retos/**").authenticated()
                         .requestMatchers("/api/admin/**").authenticated()
                         .anyRequest().authenticated()
                 )

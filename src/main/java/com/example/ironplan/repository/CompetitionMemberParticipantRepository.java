@@ -26,6 +26,12 @@ public interface CompetitionMemberParticipantRepository
         ORDER BY p.score DESC
     """)
     List<CompetitionMemberParticipant> findLeaderboard(@Param("competitionId") Long competitionId);
+
+    @Query("""
+        SELECT MAX(p.lastCalculatedAt) FROM CompetitionMemberParticipant p
+        WHERE p.competition.id = :competitionId
+    """)
+    java.util.Optional<java.time.LocalDateTime> findLatestCalculation(@Param("competitionId") Long competitionId);
  
     // Todos los participantes de una competencia individual
     // activos en ese grupo (para inscripción automática)

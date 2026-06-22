@@ -9,5 +9,7 @@ public record ActiveRoutineSessionDto(
         String mainMuscles,
         Integer sessionOrder,
         Boolean completed,
-        LocalDateTime completedAt
+        LocalDateTime completedAt,
+        Integer completionsDone,
+        Integer completionsRequired
 ) {}

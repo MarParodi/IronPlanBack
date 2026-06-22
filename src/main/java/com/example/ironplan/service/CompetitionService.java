@@ -4,11 +4,15 @@ import com.example.ironplan.model.*;
 import com.example.ironplan.repository.*;
 import com.example.ironplan.rest.dto.CompetitionDTOs;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.example.ironplan.config.CacheConfig;
+import com.example.ironplan.config.LeaderboardCacheEvictor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,6 +26,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CompetitionService {
+
+    private static final int SCORE_REFRESH_SECONDS = 60;
  
     private final CompetitionRepository                  competitionRepo;
     private final CompetitionParticipantRepository       participantRepo;
@@ -32,6 +38,7 @@ public class CompetitionService {
     private final OrganizationalAccessService            accessService;
     private final OrganizationalGroupMemberRepository    memberRepo;
     private final NotificationService                    notificationService;
+    private final LeaderboardCacheEvictor                leaderboardCacheEvictor;
  
     // ─── Admin: Listar ────────────────────────────────────────────────────────
  
@@ -46,6 +53,29 @@ public class CompetitionService {
             .filter(c -> c.getScopeReference() == null || accessService.canView(user, c.getScopeReference()))
             .map(this::toResponse)
             .collect(Collectors.toList());
+    }
+
+    /** Competencias vinculables a un reto experimental de la misma organización raíz. */
+    public List<CompetitionDTOs.Response> listLinkableForOrg(Long organizacionId) {
+        OrganizationalGroup org = groupRepo.findById(organizacionId)
+                .orElseThrow(() -> new RuntimeException("Organización no encontrada: " + organizacionId));
+        accessService.requireManage(org);
+        OrganizationalGroup orgRoot = accessService.getRoot(org);
+        if (orgRoot == null) {
+            throw new IllegalArgumentException("No se pudo resolver la organización raíz");
+        }
+        final Long rootId = orgRoot.getId();
+        User user = accessService.getCurrentUser();
+        return competitionRepo.findAll().stream()
+                .filter(c -> c.getScopeReference() != null)
+                .filter(c -> {
+                    OrganizationalGroup compRoot = accessService.getRoot(c.getScopeReference());
+                    return compRoot != null && compRoot.getId().equals(rootId);
+                })
+                .filter(c -> accessService.canManage(user, c.getScopeReference()))
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
  
     public CompetitionDTOs.Response getById(Long id) {
@@ -108,9 +138,7 @@ public class CompetitionService {
         } else if (hasGroupParticipants && hasMemberParticipants) {
             throw new IllegalArgumentException(
                 "Indica solo grupos participantes o solo miembros, no ambos");
-        }
-
-        if (hasGroupParticipants) {
+        } else if (hasGroupParticipants) {
             validateGroupParticipants(req.getCompetitionType(), req.getParticipantGroupIds(), scopeRef.getId());
             enrollGroupParticipants(saved, req.getParticipantGroupIds());
         } else if (req.getScopeLevel() == ScopeLevel.GRUPO || hasMemberParticipants) {
@@ -154,7 +182,7 @@ public class CompetitionService {
         Map<Long, Competition> byId = new LinkedHashMap<>();
 
         if (fullUser.getPrimaryOrganizationalGroup() != null) {
-            competitionRepo.findActiveCompetitionsForGroup(fullUser.getPrimaryOrganizationalGroup().getId())
+            findActiveCompetitionsVisibleFromGroup(fullUser.getPrimaryOrganizationalGroup().getId())
                 .forEach(c -> byId.put(c.getId(), c));
         }
         competitionRepo.findActiveMemberCompetitionsForUser(fullUser.getId())
@@ -165,9 +193,23 @@ public class CompetitionService {
 
     @Transactional(readOnly = true)
     public List<CompetitionDTOs.Response> getActiveForOrganizationalGroup(Long groupId) {
-        return competitionRepo.findActiveCompetitionsForGroup(groupId).stream()
+        return findActiveCompetitionsVisibleFromGroup(groupId).stream()
             .map(this::toResponse)
             .collect(Collectors.toList());
+    }
+
+    /** Competencias ACTIVE visibles desde un nodo organizacional (incluye ranking org-wide). */
+    @Transactional(readOnly = true)
+    public List<Competition> findActiveCompetitionsVisibleFromGroup(Long groupId) {
+        OrganizationalGroup group = groupRepo.findById(groupId)
+            .orElseThrow(() -> new RuntimeException("Grupo no encontrado: " + groupId));
+        OrganizationalGroup root = accessService.getRoot(group);
+        if (root == null) {
+            root = group;
+        }
+        List<Long> treeIds = accessService.collectTreeGroupIds(root.getId());
+        return competitionRepo.findVisibleForOrganizationalScope(
+            treeIds, List.of(CompetitionStatus.ACTIVE));
     }
     
     private int countMembersRecursive(Long groupId) {
@@ -185,6 +227,8 @@ public class CompetitionService {
         return getLeaderboard(competitionId, null);
     }
 
+    @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.LEADERBOARD, key = "#competitionId")
     public List<CompetitionDTOs.LeaderboardEntry> getLeaderboard(Long competitionId, User viewer) {
         Competition c = findOrThrow(competitionId);
         if (viewer != null) requireCompetitionView(c, viewer);
@@ -237,6 +281,11 @@ public class CompetitionService {
         return getMemberLeaderboard(competitionId, viewer, null);
     }
 
+    @Transactional(readOnly = true)
+    @Cacheable(
+        value = CacheConfig.MEMBER_LEADERBOARD,
+        key = "#competitionId + '-' + (#levelFilter != null ? #levelFilter.name() : 'ALL')"
+    )
     public List<CompetitionDTOs.MemberLeaderboardEntry> getMemberLeaderboard(
             Long competitionId, User viewer, Level levelFilter) {
         Competition c = findOrThrow(competitionId);
@@ -265,6 +314,7 @@ public class CompetitionService {
     // ─── Público: Ranking interno del grupo del usuario ───────────────────────
  
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.INTERNAL_RANKING, key = "#competitionId + '-' + #user.id")
     public List<CompetitionDTOs.InternalRankingEntry> getInternalRanking(Long competitionId, User user) {
         Competition c = findOrThrow(competitionId);
         requireCompetitionView(c, user);
@@ -632,6 +682,7 @@ public class CompetitionService {
             }
             participantRepo.saveAll(participants);
         }
+        leaderboardCacheEvictor.evictForCompetition(c.getId());
     }
  
     private void requireManageCompetition(Competition competition) {
@@ -671,10 +722,18 @@ public class CompetitionService {
 
     private void refreshScoresIfNeeded(Competition c) {
         autoFinishIfExpired(c);
-        if (c.getStatus() == CompetitionStatus.ACTIVE) {
+        if (c.getStatus() == CompetitionStatus.ACTIVE && scoresNeedRefresh(c)) {
             recalculateScores(c);
             competitionRepo.save(c);
         }
+    }
+
+    private boolean scoresNeedRefresh(Competition c) {
+        LocalDateTime threshold = LocalDateTime.now().minusSeconds(SCORE_REFRESH_SECONDS);
+        var latest = isMemberCompetition(c)
+                ? memberParticipantRepo.findLatestCalculation(c.getId())
+                : participantRepo.findLatestCalculation(c.getId());
+        return latest.isEmpty() || latest.get().isBefore(threshold);
     }
 
     /** CHALLENGE (y cualquier reto con endDate) pasa a FINISHED al vencer el período. */
@@ -840,6 +899,7 @@ public class CompetitionService {
             case WORKOUTS_COUNT -> "Entrenamientos";
             case FREE_ACTIVITY_COUNT -> "Actividades libres";
             case FREE_ACTIVITY_KM -> "Kilómetros (actividad libre)";
+            case VOLUME_TOTAL -> "Volumen total (kg)";
         };
     }
 
@@ -909,7 +969,7 @@ public class CompetitionService {
 
         LocalDateTime lastCalc = null;
 
-        if (c.getScopeLevel() == ScopeLevel.GRUPO) {
+        if (isMemberCompetition(c)) {
             List<CompetitionDTOs.MemberLeaderboardEntry> memberLb = getMemberLeaderboard(competitionId, user);
             builder.memberLeaderboard(memberLb);
             builder.winner(determineMemberWinner(c, memberLb));

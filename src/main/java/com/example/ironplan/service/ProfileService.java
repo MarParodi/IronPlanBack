@@ -240,31 +240,39 @@ public class ProfileService {
                         WorkoutSessionStatus.COMPLETED
                 );
 
-        // Crear un set de IDs de sesiones completadas
-        var completedSessionIds = completedWorkouts.stream()
-                .map(ws -> ws.getRoutineDetail().getId())
-                .collect(java.util.stream.Collectors.toSet());
+        // Conteo de completados por sesión de plantilla (permite repetir semanas del bloque)
+        var completionCounts = completedWorkouts.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        ws -> ws.getRoutineDetail().getId(),
+                        java.util.stream.Collectors.counting()));
 
         // Crear bloques con sesiones
         List<ActiveRoutineBlockDto> blocks = new ArrayList<>();
         int totalSessions = 0;
         int completedSessions = 0;
+        boolean previousBlockComplete = true;
 
         for (RoutineBlock block : routineBlocks) {
             List<ActiveRoutineSessionDto> sessionDtos = new ArrayList<>();
-            
+            int requiredPerSession = block.getDurationWeeks() != null && block.getDurationWeeks() > 0
+                    ? block.getDurationWeeks() : 1;
+            int minCompletionsInBlock = requiredPerSession;
+            boolean blockCompleted = true;
+
             for (RoutineDetail detail : block.getSessions()) {
-                boolean isCompleted = completedSessionIds.contains(detail.getId());
-                
-                // Buscar fecha de completado si existe
-                LocalDateTime completedAt = null;
-                if (isCompleted) {
-                    completedAt = completedWorkouts.stream()
-                            .filter(ws -> ws.getRoutineDetail().getId().equals(detail.getId()))
-                            .map(WorkoutSession::getCompletedAt)
-                            .findFirst()
-                            .orElse(null);
+                int done = completionCounts.getOrDefault(detail.getId(), 0L).intValue();
+                boolean sessionFullyDone = done >= requiredPerSession;
+                if (!sessionFullyDone) {
+                    blockCompleted = false;
                 }
+                minCompletionsInBlock = Math.min(minCompletionsInBlock, done);
+
+                LocalDateTime completedAt = completedWorkouts.stream()
+                        .filter(ws -> ws.getRoutineDetail().getId().equals(detail.getId()))
+                        .map(WorkoutSession::getCompletedAt)
+                        .filter(java.util.Objects::nonNull)
+                        .max(LocalDateTime::compareTo)
+                        .orElse(null);
 
                 sessionDtos.add(new ActiveRoutineSessionDto(
                         detail.getId(),
@@ -272,13 +280,20 @@ public class ProfileService {
                         detail.getTotalSeries() != null ? detail.getTotalSeries() : 0,
                         detail.getMuscles(),
                         detail.getSessionOrder(),
-                        isCompleted,
-                        completedAt
+                        sessionFullyDone,
+                        completedAt,
+                        done,
+                        requiredPerSession
                 ));
 
-                totalSessions++;
-                if (isCompleted) completedSessions++;
+                totalSessions += requiredPerSession;
+                completedSessions += Math.min(done, requiredPerSession);
             }
+
+            int currentWeek = blockCompleted
+                    ? requiredPerSession
+                    : Math.min(minCompletionsInBlock + 1, requiredPerSession);
+            boolean locked = !previousBlockComplete;
 
             blocks.add(new ActiveRoutineBlockDto(
                     block.getId(),
@@ -286,8 +301,13 @@ public class ProfileService {
                     block.getName(),
                     block.getDescription(),
                     block.getDurationWeeks(),
+                    currentWeek,
+                    blockCompleted,
+                    locked,
                     sessionDtos
             ));
+
+            previousBlockComplete = blockCompleted;
         }
 
         // Calcular porcentaje de progreso

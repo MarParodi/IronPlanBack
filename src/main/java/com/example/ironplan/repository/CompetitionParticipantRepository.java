@@ -19,9 +19,16 @@ public interface CompetitionParticipantRepository extends JpaRepository<Competit
     // Leaderboard grupal ordenado por score
     @Query("""
         SELECT p FROM CompetitionParticipant p
+        JOIN FETCH p.group g
         WHERE p.competition.id = :competitionId
         ORDER BY p.groupScore DESC
     """)
     List<CompetitionParticipant> findLeaderboard(@Param("competitionId") Long competitionId);
+
+    @Query("""
+        SELECT MAX(p.lastCalculatedAt) FROM CompetitionParticipant p
+        WHERE p.competition.id = :competitionId
+    """)
+    java.util.Optional<java.time.LocalDateTime> findLatestCalculation(@Param("competitionId") Long competitionId);
 }
  

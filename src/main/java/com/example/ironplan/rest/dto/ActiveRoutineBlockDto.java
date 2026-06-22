@@ -8,5 +8,8 @@ public record ActiveRoutineBlockDto(
         String name,
         String description,
         Integer durationWeeks,
+        Integer currentWeek,
+        Boolean blockCompleted,
+        Boolean locked,
         List<ActiveRoutineSessionDto> sessions
 ) {}

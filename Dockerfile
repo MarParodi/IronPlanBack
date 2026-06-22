@@ -37,8 +37,8 @@ EXPOSE 8080
 
 # Variables de entorno por defecto
 ENV SPRING_PROFILES_ACTIVE=prod
-# Limita la RAM total de la JVM (~512 MB), no solo el heap
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAM=512m -XX:MaxRAMPercentage=75.0"
+# Limita heap y metaspace para ~40 usuarios concurrentes
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseContainerSupport"
 
 # Comando de inicio
 ENTRYPOINT ["java", "-jar", "app.jar"]

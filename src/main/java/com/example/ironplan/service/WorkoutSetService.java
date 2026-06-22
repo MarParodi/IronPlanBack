@@ -37,6 +37,7 @@ public class WorkoutSetService {
     private final WorkoutSetRepository workoutSetRepo;
     private final XpService xpService;
     private final UserActivityRepository activityRepository;
+    private final EpleyService epleyService;
 
 
     public WorkoutSetService(
@@ -44,13 +45,15 @@ public class WorkoutSetService {
             WorkoutExerciseRepository workoutExerciseRepo,
             WorkoutSetRepository workoutSetRepo,
             XpService xpService,
-            UserActivityRepository activityRepository
+            UserActivityRepository activityRepository,
+            EpleyService epleyService
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
         this.workoutSetRepo = workoutSetRepo;
         this.xpService = xpService;
         this.activityRepository = activityRepository;
+        this.epleyService = epleyService;
     }
 
     // ---------- HELPERS PRIVADOS ----------
@@ -130,9 +133,15 @@ public class WorkoutSetService {
             set.setReps(input.reps());
             set.setWeightKg(input.weightKg());
             set.setCompleted(input.completed());
+            set.setRirRegistrado(input.rirRegistrado());
 
-            // (opcional) aquí podrías manejar notes por set si quisieras
-            // set.setNotes(...);
+            if (Boolean.TRUE.equals(input.completed()) && input.weightKg() != null && input.reps() != null && input.reps() > 0) {
+                set.setOneRmEstimado(epleyService.calcularOneRm(input.weightKg(), input.reps()));
+                set.setVolumenSerie(epleyService.calcularVolumenSerie(input.weightKg(), input.reps()));
+            } else if (!input.completed()) {
+                set.setOneRmEstimado(null);
+                set.setVolumenSerie(null);
+            }
 
             workoutSetRepo.save(set);
         }
@@ -253,6 +262,37 @@ public class WorkoutSetService {
                 .metricValue((double) durationMinutes)
                 .sourceId(session.getId())
                 .build());
+        }
+
+        recordVolumeTotal(session);
+    }
+
+    private void recordVolumeTotal(WorkoutSession session) {
+        if (activityRepository.existsBySourceIdAndMetricType(session.getId(), MetricType.VOLUME_TOTAL)) {
+            return;
+        }
+        var exercises = workoutExerciseRepo.findByWorkoutSession_IdOrderByExerciseOrderAsc(session.getId());
+        double volume = 0;
+        for (var ex : exercises) {
+            var sets = workoutSetRepo.findByWorkoutExercise_IdOrderBySetNumberAsc(ex.getId());
+            for (var set : sets) {
+                if (!set.isCompleted()) continue;
+                if (set.getVolumenSerie() != null) {
+                    volume += set.getVolumenSerie().doubleValue();
+                } else if (set.getWeightKg() != null && set.getReps() != null) {
+                    volume += set.getWeightKg() * set.getReps();
+                }
+            }
+        }
+        if (volume > 0) {
+            activityRepository.save(UserActivity.builder()
+                    .user(session.getUser())
+                    .activityDate(session.getCompletedAt() != null
+                            ? session.getCompletedAt().toLocalDate() : LocalDate.now())
+                    .metricType(MetricType.VOLUME_TOTAL)
+                    .metricValue(volume)
+                    .sourceId(session.getId())
+                    .build());
         }
     }
     

@@ -67,6 +67,16 @@ public class WorkoutSet {
     @Column(name = "previous_weight_kg")
     private Double previousWeightKg;
 
+    @Min(0)
+    @Column(name = "rir_registrado")
+    private Integer rirRegistrado;
+
+    @Column(name = "one_rm_estimado", precision = 6, scale = 2)
+    private java.math.BigDecimal oneRmEstimado;
+
+    @Column(name = "volumen_serie", precision = 10, scale = 2)
+    private java.math.BigDecimal volumenSerie;
+
     // --------- AUDITORÍA ---------
 
     @Column(name = "created_at", nullable = false, updatable = false)

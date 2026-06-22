@@ -41,5 +41,11 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
             WorkoutSessionStatus status
     );
 
+    long countByUser_IdAndRoutineDetail_IdAndStatus(
+            Long userId,
+            Long routineDetailId,
+            WorkoutSessionStatus status
+    );
+
     List<WorkoutSession> findByUser_IdAndStatusOrderByCompletedAtDesc(Long userId, WorkoutSessionStatus status);
 }
