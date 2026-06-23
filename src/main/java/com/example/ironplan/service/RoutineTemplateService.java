@@ -28,6 +28,7 @@ public class RoutineTemplateService {
     private final UserUnlockedRoutineRepository unlockedRepo;
     private final UserRepository userRepo;
     private final AchievementService achievementService;
+    private final NotificationService notificationService;
 
 
     public RoutineTemplateService(RoutineTemplateRepository repo,
@@ -35,13 +36,15 @@ public class RoutineTemplateService {
                                   ExerciseRepository exerciseRepo,
                                   UserUnlockedRoutineRepository unlockedRepo,
                                   UserRepository userRepo,
-                                  AchievementService achievementService) {
+                                  AchievementService achievementService,
+                                  NotificationService notificationService) {
         this.repo = repo;
         this.blockRepo = blockRepo;
         this.exerciseRepo = exerciseRepo;
         this.unlockedRepo = unlockedRepo;
         this.userRepo = userRepo;
         this.achievementService = achievementService;
+        this.notificationService = notificationService;
     }
 
     // ---------- CREAR RUTINA ----------
@@ -138,6 +141,10 @@ public class RoutineTemplateService {
 
         // Verificar hazañas de creación de rutinas
         achievementService.checkRoutineCreationAchievements(user);
+
+        if (request.isPublic()) {
+            notificationService.notifyCommunityAboutNewRoutine(routine, user);
+        }
 
         return new CreateRoutineResponse(
                 routine.getId(),

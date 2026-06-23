@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
@@ -41,4 +42,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     // Verificar que una notificación pertenece al usuario
     boolean existsByIdAndUser_Id(Long id, Long userId);
+
+    boolean existsByUser_IdAndRouteUrl(Long userId, String routeUrl);
+
+    boolean existsByUser_IdAndTitleAndCreatedAtAfter(Long userId, String title, LocalDateTime createdAt);
+
+    boolean existsByUser_IdAndMessageContainingAndCreatedAtAfter(
+            Long userId, String messageFragment, LocalDateTime createdAt);
 }

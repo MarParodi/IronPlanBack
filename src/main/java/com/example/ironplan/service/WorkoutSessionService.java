@@ -28,6 +28,7 @@ public class WorkoutSessionService {
     private final RoutineDetailRepository routineDetailRepo;
     private final UserRepository userRepo;
     private final AchievementService achievementService;
+    private final NotificationService notificationService;
     private final ExerciseRepository exerciseRepo;
     private final UserActivityRepository activityRepository;
 
@@ -40,6 +41,7 @@ public class WorkoutSessionService {
             UserRepository userRepo,
             ExerciseRepository exerciseRepo,
             AchievementService achievementService,
+            NotificationService notificationService,
             UserActivityRepository activityRepository
     ) {
         this.sessionRepo = sessionRepo;
@@ -48,6 +50,7 @@ public class WorkoutSessionService {
         this.routineDetailRepo = routineDetailRepo;
         this.userRepo = userRepo;
         this.achievementService = achievementService;
+        this.notificationService = notificationService;
         this.exerciseRepo = exerciseRepo;
         this.activityRepository = activityRepository;
     }
@@ -298,6 +301,8 @@ public class WorkoutSessionService {
         session.setProgressPercentage(100.0);
         sessionRepo.save(session);
 
+        notificationService.handleWorkoutSessionCompleted(session);
+
         // Verificar hazañas de entrenamiento
         achievementService.checkWorkoutAchievements(session.getUser());
         
@@ -369,6 +374,8 @@ public class WorkoutSessionService {
         session.setCompletedAt(LocalDateTime.now());
         recordUserActivity(session);
         sessionRepo.save(session);
+
+        notificationService.handleWorkoutSessionCompleted(session);
 
         // Verificar hazañas si completó al menos un ejercicio
         if (completedExercises > 0) {
