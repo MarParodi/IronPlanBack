@@ -9,4 +9,6 @@ import java.util.List;
 public interface ExperimentoRetoRepository extends JpaRepository<ExperimentoReto, Long> {
 
     List<ExperimentoReto> findByEstado(ExperimentoRetoEstado estado);
+
+    java.util.Optional<ExperimentoReto> findByCompetitionId(Long competitionId);
 }

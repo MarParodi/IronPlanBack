@@ -374,6 +374,11 @@ public class ExperimentoRetoService {
         accessService.requireManage(reto.getOrganizacion());
         reto.setEstado(ExperimentoRetoEstado.CERRADO);
         retoRepo.save(reto);
+
+        if (reto.getCompetition() != null
+                && reto.getCompetition().getStatus() == CompetitionStatus.ACTIVE) {
+            competitionService.finish(reto.getCompetition().getId());
+        }
     }
 
     @Transactional

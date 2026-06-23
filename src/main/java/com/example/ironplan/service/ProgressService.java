@@ -21,6 +21,7 @@ public class ProgressService {
     private final ProgressRepository progressRepo;
     private final ExerciseRepository exerciseRepo;
     private final WorkoutSetRepository workoutSetRepo;
+    private final NotificationService notificationService;
 
     // Incremento de peso estándar (2.5 kg para la mayoría de ejercicios)
     private static final double WEIGHT_INCREMENT = 2.5;
@@ -28,11 +29,13 @@ public class ProgressService {
     public ProgressService(
             ProgressRepository progressRepo,
             ExerciseRepository exerciseRepo,
-            WorkoutSetRepository workoutSetRepo
+            WorkoutSetRepository workoutSetRepo,
+            NotificationService notificationService
     ) {
         this.progressRepo = progressRepo;
         this.exerciseRepo = exerciseRepo;
         this.workoutSetRepo = workoutSetRepo;
+        this.notificationService = notificationService;
     }
 
     // ============ RESUMEN GENERAL DE PROGRESO ============
@@ -255,13 +258,17 @@ public class ProgressService {
         List<RecentPerformanceDto> recentPerformance = buildRecentPerformance(recentExercises, repsMin, repsMax);
 
         // Aplicar algoritmo de recomendación
-        return calculateRecommendation(
+        ProgressionRecommendationDto recommendation = calculateRecommendation(
                 exercise,
                 plannedSets,
                 repsMin,
                 repsMax,
                 recentPerformance
         );
+
+        notificationService.maybeNotifyProgressionSuggestion(user, recommendation);
+
+        return recommendation;
     }
 
     // ============ ALGORITMO DE RECOMENDACIÓN ============

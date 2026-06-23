@@ -38,6 +38,8 @@ public class WorkoutSetService {
     private final XpService xpService;
     private final UserActivityRepository activityRepository;
     private final EpleyService epleyService;
+    private final NotificationService notificationService;
+    private final AchievementService achievementService;
 
 
     public WorkoutSetService(
@@ -46,7 +48,9 @@ public class WorkoutSetService {
             WorkoutSetRepository workoutSetRepo,
             XpService xpService,
             UserActivityRepository activityRepository,
-            EpleyService epleyService
+            EpleyService epleyService,
+            NotificationService notificationService,
+            AchievementService achievementService
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
@@ -54,6 +58,8 @@ public class WorkoutSetService {
         this.xpService = xpService;
         this.activityRepository = activityRepository;
         this.epleyService = epleyService;
+        this.notificationService = notificationService;
+        this.achievementService = achievementService;
     }
 
     // ---------- HELPERS PRIVADOS ----------
@@ -212,6 +218,12 @@ public class WorkoutSetService {
                 );
                 xpService.grantXp(session.getUser(), xpToGrant, XpEventType.WORKOUT_COMPLETED, description);
             }
+
+            sessionRepo.save(session);
+            notificationService.handleWorkoutSessionCompleted(session);
+            achievementService.checkWorkoutAchievements(session.getUser());
+            achievementService.checkXpAchievements(session.getUser());
+            return;
         }
 
         sessionRepo.save(session);

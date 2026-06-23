@@ -176,5 +176,55 @@ public class CompetitionDTOs {
         private MyScore myScore;
         private String metricLabel;
         private LocalDateTime lastCalculatedAt;
+        private PodiumsResponse podiums;
+        private List<DeclaredWinnerDto> declaredWinners;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class PodiumEntryDto {
+        private int rank;
+        private Long userId;
+        private String fullName;
+        private String username;
+        private String profilePictureUrl;
+        private String levelCategory;
+        private Double compositeScore;
+        private Double consistencyRaw;
+        private Double oneRmProgressRaw;
+        private Double volumeRaw;
+        private Double consistencyNorm;
+        private Double oneRmNorm;
+        private Double volumeNorm;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class PodiumsResponse {
+        private LocalDateTime generated;
+        private List<PodiumEntryDto> generalTop3;
+        private java.util.Map<String, List<PodiumEntryDto>> byLevel;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class DeclaredWinnerDto {
+        private String scope;
+        private String levelCategory;
+        private String levelLabel;
+        private Long userId;
+        private String fullName;
+        private String username;
+        private String profilePictureUrl;
+        private LocalDateTime declaredAt;
+    }
+
+    @Getter @Setter
+    public static class DeclareWinnerRequest {
+        @NotNull
+        private PodiumScope scope;
+        private ParticipanteCategoria levelCategory;
+        @NotNull
+        private Long userId;
     }
 }

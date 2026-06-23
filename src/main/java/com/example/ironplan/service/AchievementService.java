@@ -19,6 +19,7 @@ public class AchievementService {
     private final WorkoutSessionRepository workoutSessionRepo;
     private final RoutineTemplateRepository routineTemplateRepo;
     private final XpService xpService;
+    private final NotificationService notificationService;
 
     // Códigos de hazañas
     public static final String FIRST_WORKOUT = "FIRST_WORKOUT";
@@ -36,13 +37,15 @@ public class AchievementService {
             UserAchievementRepository userAchievementRepo,
             WorkoutSessionRepository workoutSessionRepo,
             RoutineTemplateRepository routineTemplateRepo,
-            XpService xpService
+            XpService xpService,
+            NotificationService notificationService
     ) {
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
         this.workoutSessionRepo = workoutSessionRepo;
         this.routineTemplateRepo = routineTemplateRepo;
         this.xpService = xpService;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -220,6 +223,12 @@ public class AchievementService {
                     "Hazaña desbloqueada: " + achievement.getName()
             );
         }
+
+        notificationService.notifyAchievementUnlocked(
+                user,
+                achievement.getName(),
+                achievement.getXpReward() != null ? achievement.getXpReward() : 0
+        );
 
         return Optional.of(new UserAchievementDto(
                 achievement.getCode(),

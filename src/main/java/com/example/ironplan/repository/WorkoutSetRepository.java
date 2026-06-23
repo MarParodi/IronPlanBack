@@ -51,7 +51,39 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
             Pageable pageable
     );
 
+    @Query("""
+        SELECT MAX(ws.oneRmEstimado) FROM WorkoutSet ws
+        JOIN ws.workoutExercise we
+        JOIN we.workoutSession s
+        WHERE s.user.id = :userId
+          AND s.status = com.example.ironplan.model.WorkoutSessionStatus.COMPLETED
+          AND ws.completed = true
+          AND ws.oneRmEstimado IS NOT NULL
+          AND CAST(s.completedAt AS localdate) >= :startDate
+          AND CAST(s.completedAt AS localdate) <= :endDate
+        """)
+    java.math.BigDecimal maxOneRmInPeriod(
+            @Param("userId") Long userId,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate
+    );
 
-
+    @Query("""
+        SELECT ws.oneRmEstimado FROM WorkoutSet ws
+        JOIN ws.workoutExercise we
+        JOIN we.workoutSession s
+        WHERE s.user.id = :userId
+          AND s.status = com.example.ironplan.model.WorkoutSessionStatus.COMPLETED
+          AND ws.completed = true
+          AND ws.oneRmEstimado IS NOT NULL
+          AND CAST(s.completedAt AS localdate) >= :startDate
+          AND CAST(s.completedAt AS localdate) <= :endDate
+        ORDER BY s.completedAt ASC
+        """)
+    List<java.math.BigDecimal> findOneRmValuesChronological(
+            @Param("userId") Long userId,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate
+    );
 }
 

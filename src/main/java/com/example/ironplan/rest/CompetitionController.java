@@ -6,6 +6,7 @@ import com.example.ironplan.model.CompetitionType;
 import com.example.ironplan.model.Level;
 import com.example.ironplan.rest.dto.CompetitionDTOs;
 import com.example.ironplan.service.CompetitionService;
+import com.example.ironplan.service.CompetitionPodiumService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,7 @@ import java.util.List;
 class AdminCompetitionController {
  
     private final CompetitionService competitionService;
+    private final CompetitionPodiumService podiumService;
  
     @GetMapping
     public ResponseEntity<List<CompetitionDTOs.Response>> getAll(
@@ -68,6 +70,28 @@ class AdminCompetitionController {
     ) {
         return ResponseEntity.ok(competitionService.getMembersUnderGroup(groupId));
     }
+
+    @PostMapping("/{id}/generate-podiums")
+    public ResponseEntity<CompetitionDTOs.PodiumsResponse> generatePodiums(
+        @PathVariable Long id,
+        @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(podiumService.generatePodiums(id, user));
+    }
+
+    @GetMapping("/{id}/podiums")
+    public ResponseEntity<CompetitionDTOs.PodiumsResponse> getPodiums(@PathVariable Long id) {
+        return ResponseEntity.ok(podiumService.getPodiums(id));
+    }
+
+    @PostMapping("/{id}/declare-winner")
+    public ResponseEntity<CompetitionDTOs.DeclaredWinnerDto> declareWinner(
+        @PathVariable Long id,
+        @Valid @RequestBody CompetitionDTOs.DeclareWinnerRequest request,
+        @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(podiumService.declareWinner(id, request, user));
+    }
 }
  
 // ─── Público (usuario autenticado) ────────────────────────────────────────────
@@ -78,6 +102,7 @@ class AdminCompetitionController {
 class PublicCompetitionController {
  
     private final CompetitionService competitionService;
+    private final CompetitionPodiumService podiumService;
  
     @GetMapping("/active")
     public ResponseEntity<List<CompetitionDTOs.Response>> getActive(
@@ -154,6 +179,15 @@ class PublicCompetitionController {
     ) {
         return ResponseEntity.ok(competitionService.getAllForUser(user));
     }
-    
+
+    @GetMapping("/{id}/podiums")
+    public ResponseEntity<CompetitionDTOs.PodiumsResponse> getPodiums(@PathVariable Long id) {
+        return ResponseEntity.ok(podiumService.getPodiums(id));
+    }
+
+    @GetMapping("/{id}/winners")
+    public ResponseEntity<List<CompetitionDTOs.DeclaredWinnerDto>> getWinners(@PathVariable Long id) {
+        return ResponseEntity.ok(podiumService.getDeclaredWinners(id));
+    }
 }
  
