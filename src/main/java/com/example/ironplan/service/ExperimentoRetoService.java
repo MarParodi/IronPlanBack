@@ -179,19 +179,21 @@ public class ExperimentoRetoService {
         }
         validarObjetivo(req.objetivoCodigo(), req.objetivoTextoLibre());
 
+        ParticipanteCategoria categoria = ParticipanteCategoria.fromUserLevel(user.getLevel());
+
         ParticipanteReto participante = participanteRepo.findByRetoIdAndUsuarioId(retoId, user.getId())
                 .orElseGet(() -> {
                     ParticipanteReto p = ParticipanteReto.builder()
                             .reto(reto)
                             .usuario(user)
-                            .categoria(req.categoria())
+                            .categoria(categoria)
                             .objetivoCodigo(req.objetivoCodigo())
                             .objetivoTextoLibre(req.objetivoTextoLibre())
                             .build();
                     return participanteRepo.save(p);
                 });
 
-        participante.setCategoria(req.categoria());
+        participante.setCategoria(categoria);
         participante.setObjetivoCodigo(req.objetivoCodigo());
         participante.setObjetivoTextoLibre(req.objetivoTextoLibre());
         participanteRepo.save(participante);
@@ -311,7 +313,7 @@ public class ExperimentoRetoService {
                 participante.getCompletoPretest(), participante.getCompletoPosttest(),
                 participante.getCompletoSus(), participante.getActivo(),
                 reto.getPosttestIpaqActivo(), reto.getSusActivo(),
-                participante.getCategoria(), participante.getObjetivoCodigo());
+                ParticipanteCategoria.fromUserLevel(user.getLevel()), participante.getObjetivoCodigo());
     }
 
     @Transactional(readOnly = true)

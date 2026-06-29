@@ -17,7 +17,6 @@ public final class ExperimentoDTOs {
     private ExperimentoDTOs() {}
 
     public record InscripcionRequest(
-            @NotNull ParticipanteCategoria categoria,
             @NotBlank @Size(max = 10) String objetivoCodigo,
             @Size(max = 500) String objetivoTextoLibre
     ) {}
