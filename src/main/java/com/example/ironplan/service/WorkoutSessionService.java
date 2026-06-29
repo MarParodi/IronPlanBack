@@ -395,26 +395,34 @@ public class WorkoutSessionService {
         }
 
         // 2) Determinar el ejercicio “actual”
-        //    - Primero intentamos encontrar uno con estado ACTIVE
-        //    - Si no hay, usamos el de menor exerciseOrder
         Integer currentOrder = allExercises.stream()
+                .filter(we -> we.getStatus() == WorkoutExerciseStatus.IN_PROGRESS)
                 .map(WorkoutExercise::getExerciseOrder)
-                .findFirst()
-                .orElse(
-                        allExercises.stream()
+                .max(Integer::compareTo)
+                .orElseGet(() -> allExercises.stream()
+                        .filter(we -> we.getStatus() == WorkoutExerciseStatus.COMPLETED)
+                        .map(WorkoutExercise::getExerciseOrder)
+                        .max(Integer::compareTo)
+                        .orElseGet(() -> allExercises.stream()
+                                .filter(we -> we.getStatus() == WorkoutExerciseStatus.PENDING)
                                 .map(WorkoutExercise::getExerciseOrder)
                                 .min(Integer::compareTo)
-                                .orElse(0)
-                );
+                                .orElse(0)));
 
         // 3) Mapear todos los ejercicios de la sesión por ID
         Map<Long, WorkoutExercise> byId = allExercises.stream()
                 .collect(Collectors.toMap(WorkoutExercise::getId, Function.identity()));
 
-        // 4) Validar que TODOS los ids que mandó el front están en la sesión
+        // 4) Validar ids y que solo se reordenen ejercicios posteriores al actual
+        final int anchorOrder = currentOrder;
         for (Long id : workoutExerciseIds) {
-            if (!byId.containsKey(id)) {
+            WorkoutExercise we = byId.get(id);
+            if (we == null) {
                 throw new IllegalArgumentException("El ejercicio " + id + " no pertenece a la sesión");
+            }
+            if (we.getExerciseOrder() <= anchorOrder) {
+                throw new IllegalArgumentException(
+                        "Solo se pueden reordenar ejercicios posteriores al ejercicio actual");
             }
         }
 

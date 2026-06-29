@@ -1,6 +1,7 @@
 package com.example.ironplan.rest.dto;
  
 import com.example.ironplan.model.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.*;
 import lombok.*;
  
@@ -63,6 +64,7 @@ public class CompetitionDTOs {
         private CompetitionStatus status;
         private LocalDateTime     createdAt;
         private int               participantCount;
+        @JsonProperty("isMemberCompetition")
         private boolean           isMemberCompetition; // true si scopeLevel = GRUPO o participantMode = ORGANIZATION_MEMBERS
         private ParticipantMode   participantMode;
     }
@@ -122,6 +124,7 @@ public class CompetitionDTOs {
         private Integer memberRank;
         private Double  individualScore;
  
+        @JsonProperty("isMemberCompetition")
         private boolean isMemberCompetition;
     }
  
@@ -160,6 +163,7 @@ public class CompetitionDTOs {
         private LocalDate         endDate;
         private CompetitionStatus status;
         private int               participantCount;
+        @JsonProperty("isMemberCompetition")
         private boolean           isMemberCompetition;
         private WinnerInfo        leader;
         private String            metricLabel;
