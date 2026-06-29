@@ -93,7 +93,7 @@ public class ExperimentExportService {
             var sus = susRepo.findByParticipanteRetoId(pr.getId()).orElse(null);
 
             rows.add(csv(
-                    pr.getId(), pr.getCategoria(), pr.getObjetivoCodigo(), u.getGender(), edad, org,
+                    pr.getId(), ParticipanteCategoria.fromUserLevel(u.getLevel()), pr.getObjetivoCodigo(), u.getGender(), edad, org,
                     ipaqField(ipaqPre, "caminataDias"), ipaqField(ipaqPre, "caminataMin"),
                     ipaqField(ipaqPre, "modDias"), ipaqField(ipaqPre, "modMin"),
                     ipaqField(ipaqPre, "vigDias"), ipaqField(ipaqPre, "vigMin"),

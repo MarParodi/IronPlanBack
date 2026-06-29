@@ -28,8 +28,6 @@ public class CompetitionPodiumService {
     private final CompetitionDeclaredWinnerRepository declaredWinnerRepo;
     private final UserActivityRepository activityRepo;
     private final WorkoutSetRepository workoutSetRepo;
-    private final ExperimentoRetoRepository experimentoRetoRepo;
-    private final ParticipanteRetoRepository participanteRetoRepo;
     private final OrganizationalAccessService accessService;
     private final NotificationService notificationService;
 
@@ -280,25 +278,10 @@ public class CompetitionPodiumService {
 
     private Map<Long, ParticipanteCategoria> resolveCategories(Competition competition, List<User> participants) {
         Map<Long, ParticipanteCategoria> map = new HashMap<>();
-        Optional<ExperimentoReto> retoOpt = experimentoRetoRepo.findByCompetitionId(competition.getId());
-
         for (User user : participants) {
-            if (retoOpt.isPresent()) {
-                participanteRetoRepo.findByRetoIdAndUsuarioId(retoOpt.get().getId(), user.getId())
-                        .ifPresent(p -> map.put(user.getId(), p.getCategoria()));
-            }
-            map.putIfAbsent(user.getId(), mapLevelToCategory(user.getLevel()));
+            map.put(user.getId(), ParticipanteCategoria.fromUserLevel(user.getLevel()));
         }
         return map;
-    }
-
-    private ParticipanteCategoria mapLevelToCategory(Level level) {
-        if (level == null) return ParticipanteCategoria.PRINCIPIANTE;
-        return switch (level) {
-            case NOVATO -> ParticipanteCategoria.PRINCIPIANTE;
-            case INTERMEDIO -> ParticipanteCategoria.INTERMEDIO;
-            case AVANZADO -> ParticipanteCategoria.AVANZADO;
-        };
     }
 
     private boolean isUserInTop3(Long competitionId, PodiumScope scope,
