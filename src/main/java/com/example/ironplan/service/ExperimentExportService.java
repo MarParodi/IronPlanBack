@@ -31,6 +31,10 @@ public class ExperimentExportService {
                 .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
         accessService.requireManage(reto.getOrganizacion());
 
+        int semanasIntervencion = reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
+        int semInicio = 1;
+        int semFin = semanasIntervencion;
+
         List<String> rows = new ArrayList<>();
         rows.add(String.join(",",
                 "participante_id", "categoria", "objetivo", "genero", "edad", "organizacion",
@@ -39,9 +43,11 @@ public class ExperimentExportService {
                 "ipaq_post_caminata_dias", "ipaq_post_caminata_min", "ipaq_post_mod_dias", "ipaq_post_mod_min",
                 "ipaq_post_vig_dias", "ipaq_post_vig_min", "ipaq_post_met_total", "ipaq_post_categoria", "ipaq_post_outlier",
                 "delta_met",
-                "volumen_semana_1", "one_rm_semana_1", "volumen_semana_8", "one_rm_semana_8",
+                "semanas_intervencion", "semana_num_inicio", "semana_num_fin",
+                "volumen_semana_inicio", "one_rm_semana_inicio",
+                "volumen_semana_fin", "one_rm_semana_fin",
                 "delta_one_rm", "delta_volumen",
-                "total_sesiones", "frecuencia_semanal_promedio", "xp_total_acumulado", "posicion_leaderboard_final",
+                "total_sesiones", "frecuencia_semanal_promedio", "xp_total_acumulado", "posicion_leaderboard_fin",
                 "sus_q1", "sus_q2", "sus_q3", "sus_q4", "sus_q5", "sus_q6", "sus_q7", "sus_q8", "sus_q9", "sus_q10", "puntaje_sus",
                 "incluir_en_analisis", "tiene_pretest", "tiene_posttest", "tiene_sus"));
 
@@ -63,8 +69,8 @@ public class ExperimentExportService {
             int edad = u.getBirthday() != null ? Period.between(u.getBirthday(), LocalDate.now()).getYears() : 0;
             String org = reto.getOrganizacion() != null ? reto.getOrganizacion().getName() : "";
 
-            var s1 = snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, u.getId(), 1).orElse(null);
-            var s8 = snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, u.getId(), 8).orElse(null);
+            var sInicio = snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, u.getId(), semInicio).orElse(null);
+            var sFin = snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, u.getId(), semFin).orElse(null);
             var snaps = snapshotRepo.findByRetoIdAndUsuarioIdOrderByNumeroSemanaAsc(retoId, u.getId());
 
             int totalSesiones = snaps.stream().mapToInt(SnapshotSemanalUsuario::getSesionesCompletadas).sum();
@@ -76,8 +82,13 @@ public class ExperimentExportService {
                 deltaMet = ipaqPost.getMetTotalSemana().subtract(ipaqPre.getMetTotalSemana());
             }
 
-            BigDecimal deltaOneRm = delta(s8 != null ? s8.getOneRmPromedio() : null, s1 != null ? s1.getOneRmPromedio() : null);
-            BigDecimal deltaVol = delta(s8 != null ? s8.getVolumenTotalSemana() : null, s1 != null ? s1.getVolumenTotalSemana() : null);
+            boolean compararSemanas = semFin > semInicio;
+            BigDecimal deltaOneRm = compararSemanas
+                    ? delta(sFin != null ? sFin.getOneRmPromedio() : null, sInicio != null ? sInicio.getOneRmPromedio() : null)
+                    : null;
+            BigDecimal deltaVol = compararSemanas
+                    ? delta(sFin != null ? sFin.getVolumenTotalSemana() : null, sInicio != null ? sInicio.getVolumenTotalSemana() : null)
+                    : null;
 
             var sus = susRepo.findByParticipanteRetoId(pr.getId()).orElse(null);
 
@@ -96,11 +107,13 @@ public class ExperimentExportService {
                     ipaqPost != null ? ipaqPost.getCategoriaIpaq() : "",
                     ipaqPost != null ? ipaqPost.getEsOutlier() : "",
                     deltaMet,
-                    snapField(s1, "vol"), snapField(s1, "orm"), snapField(s8, "vol"), snapField(s8, "orm"),
+                    semanasIntervencion, semInicio, semFin,
+                    snapField(sInicio, "vol"), snapField(sInicio, "orm"),
+                    snapField(sFin, "vol"), snapField(sFin, "orm"),
                     deltaOneRm, deltaVol,
                     totalSesiones, round2(freqProm),
-                    s8 != null ? s8.getXpAcumuladoAlFin() : (u.getLifetimeXp() != null ? u.getLifetimeXp() : 0),
-                    s8 != null ? s8.getPosicionLeaderboard() : "",
+                    sFin != null ? sFin.getXpAcumuladoAlFin() : (u.getLifetimeXp() != null ? u.getLifetimeXp() : 0),
+                    sFin != null ? sFin.getPosicionLeaderboard() : "",
                     susField(sus, 1), susField(sus, 2), susField(sus, 3), susField(sus, 4), susField(sus, 5),
                     susField(sus, 6), susField(sus, 7), susField(sus, 8), susField(sus, 9), susField(sus, 10),
                     sus != null ? sus.getPuntajeSus() : "",

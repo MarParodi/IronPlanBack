@@ -117,7 +117,7 @@ public class AdminRetoController {
     public ResponseEntity<ExperimentoDTOs.SnapshotGenerarResponse> generarSnapshots(
             @PathVariable Long retoId,
             @AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(snapshotService.generarSnapshotSemanaActual(retoId, user));
+        return ResponseEntity.ok(snapshotService.generarSnapshotsFaltantes(retoId, user));
     }
 
     @GetMapping("/{retoId}/exportar/csv")

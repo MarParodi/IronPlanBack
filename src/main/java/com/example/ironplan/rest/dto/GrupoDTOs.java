@@ -60,6 +60,8 @@ public class GrupoDTOs {
         private String profilePictureUrl;
         private Long groupId;
         private String groupName;
+        /** Nivel de entrenamiento del perfil: NOVATO, INTERMEDIO, AVANZADO */
+        private String level;
     }
 
     @Getter @Setter

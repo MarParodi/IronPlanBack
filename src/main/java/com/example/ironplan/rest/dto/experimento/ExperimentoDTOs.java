@@ -115,6 +115,7 @@ public final class ExperimentoDTOs {
             ExperimentoRetoEstado estado,
             LocalDate fechaInicio,
             LocalDate fechaFin,
+            Integer semanasIntervencion,
             Long competitionId,
             long participantesInscritos,
             long completaronPretest,

@@ -14,7 +14,6 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,21 +47,67 @@ public class SnapshotService {
         }
     }
 
+    /** Genera la semana en curso (job automático / compatibilidad). */
     @Transactional
     public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotSemanaActual(Long retoId, User admin) {
-        ExperimentoReto reto = retoRepo.findById(retoId)
-                .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        int semana = calcularNumeroSemana(reto.getFechaInicio(), LocalDate.now());
+        if (semana < 1 || semana > semanasIntervencion(reto)) {
+            return new ExperimentoDTOs.SnapshotGenerarResponse(Math.max(semana, 0), 0);
+        }
+        int procesados = generarSnapshotSemanaSiFalta(reto, semana);
+        return new ExperimentoDTOs.SnapshotGenerarResponse(semana, procesados);
+    }
 
-        LocalDate hoy = LocalDate.now();
-        if (hoy.isBefore(reto.getFechaInicio())) {
+    /** Admin: genera snapshots faltantes hasta la semana actual o todas si el reto ya terminó. */
+    @Transactional
+    public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotsFaltantes(Long retoId, User admin) {
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        int hasta = calcularSemanaHasta(reto);
+        return generarSemanas(reto, 1, hasta);
+    }
+
+    /** Al cerrar el reto: genera retroactivamente todas las semanas de intervención. */
+    @Transactional
+    public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotsRetroactivos(Long retoId, User admin) {
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        return generarSemanas(reto, 1, semanasIntervencion(reto));
+    }
+
+    private ExperimentoDTOs.SnapshotGenerarResponse generarSemanas(ExperimentoReto reto, int desde, int hasta) {
+        if (hasta < desde) {
             return new ExperimentoDTOs.SnapshotGenerarResponse(0, 0);
         }
-
-        int numeroSemana = calcularNumeroSemana(reto.getFechaInicio(), hoy);
-        if (numeroSemana < 1 || numeroSemana > reto.getSemanasIntervencion()) {
-            return new ExperimentoDTOs.SnapshotGenerarResponse(numeroSemana, 0);
+        int procesados = 0;
+        int ultimaSemana = 0;
+        for (int w = desde; w <= hasta; w++) {
+            int c = generarSnapshotSemanaSiFalta(reto, w);
+            if (c > 0) {
+                procesados += c;
+                ultimaSemana = w;
+            }
         }
+        if (ultimaSemana == 0) {
+            ultimaSemana = hasta;
+        }
+        return new ExperimentoDTOs.SnapshotGenerarResponse(ultimaSemana, procesados);
+    }
 
+    private int calcularSemanaHasta(ExperimentoReto reto) {
+        int semanas = semanasIntervencion(reto);
+        LocalDate hoy = LocalDate.now();
+
+        if (reto.getEstado() == ExperimentoRetoEstado.CERRADO || !hoy.isBefore(reto.getFechaFin().plusDays(1))) {
+            return semanas;
+        }
+        if (hoy.isBefore(reto.getFechaInicio())) {
+            return 0;
+        }
+        int actual = calcularNumeroSemana(reto.getFechaInicio(), hoy);
+        return Math.min(actual, semanas);
+    }
+
+    private int generarSnapshotSemanaSiFalta(ExperimentoReto reto, int numeroSemana) {
         LocalDate inicioSemana = reto.getFechaInicio().plusWeeks(numeroSemana - 1);
         LocalDate finSemana = inicioSemana.plusDays(6);
         if (finSemana.isAfter(reto.getFechaFin())) {
@@ -70,15 +115,24 @@ public class SnapshotService {
         }
 
         int procesados = 0;
-        for (ParticipanteReto p : participanteRepo.findByRetoIdAndActivoTrue(retoId)) {
-            if (snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, p.getUsuario().getId(), numeroSemana).isPresent()) {
+        for (ParticipanteReto p : participanteRepo.findByRetoIdAndActivoTrue(reto.getId())) {
+            if (snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(
+                    reto.getId(), p.getUsuario().getId(), numeroSemana).isPresent()) {
                 continue;
             }
             snapshotRepo.save(buildSnapshot(reto, p, numeroSemana, inicioSemana, finSemana));
             procesados++;
         }
+        return procesados;
+    }
 
-        return new ExperimentoDTOs.SnapshotGenerarResponse(numeroSemana, procesados);
+    private ExperimentoReto findRetoOrThrow(Long retoId) {
+        return retoRepo.findById(retoId)
+                .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
+    }
+
+    private static int semanasIntervencion(ExperimentoReto reto) {
+        return reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
     }
 
     private SnapshotSemanalUsuario buildSnapshot(
