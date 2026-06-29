@@ -278,6 +278,7 @@ public class GroupMembershipService {
             .profilePictureUrl(m.getUser().getProfilePictureUrl())
             .groupId(g.getId())
             .groupName(g.getName())
+            .level(m.getUser().getLevel() != null ? m.getUser().getLevel().name() : null)
             .build();
     }
 

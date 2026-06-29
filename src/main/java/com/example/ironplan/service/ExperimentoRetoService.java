@@ -32,6 +32,7 @@ public class ExperimentoRetoService {
     private final CompetitionRepository competitionRepo;
     private final CompetitionService competitionService;
     private final SnapshotSemanalUsuarioRepository snapshotRepo;
+    private final SnapshotService snapshotService;
 
     @Transactional(readOnly = true)
     public List<ExperimentoDTOs.RetoResumenResponse> listRetosActivosParaUsuario(User user) {
@@ -321,6 +322,7 @@ public class ExperimentoRetoService {
         return new ExperimentoDTOs.ExperimentoEstadoResponse(
                 reto.getId(), reto.getNombre(), reto.getEstado(),
                 reto.getFechaInicio(), reto.getFechaFin(),
+                reto.getSemanasIntervencion(),
                 reto.getCompetition() != null ? reto.getCompetition().getId() : null,
                 participanteRepo.countByRetoId(retoId),
                 participanteRepo.countByRetoIdAndCompletoPretestTrue(retoId),
@@ -372,6 +374,9 @@ public class ExperimentoRetoService {
     public void cerrarReto(Long retoId, User admin) {
         ExperimentoReto reto = findRetoOrThrow(retoId);
         accessService.requireManage(reto.getOrganizacion());
+
+        snapshotService.generarSnapshotsRetroactivos(retoId, admin);
+
         reto.setEstado(ExperimentoRetoEstado.CERRADO);
         retoRepo.save(reto);
 
