@@ -235,8 +235,6 @@ public class CompetitionService {
         if (isMemberCompetition(c))
             throw new IllegalArgumentException("Esta competencia es individual, usa /leaderboard/members");
 
-        refreshScoresIfNeeded(c);
-
         AtomicInteger rank = new AtomicInteger(1);
         return participantRepo.findLeaderboard(competitionId).stream()
             .map(p -> CompetitionDTOs.LeaderboardEntry.builder()
@@ -293,8 +291,6 @@ public class CompetitionService {
         if (!isMemberCompetition(c))
             throw new IllegalArgumentException("Esta competencia es grupal, usa /leaderboard");
 
-        refreshScoresIfNeeded(c);
-
         AtomicInteger rank = new AtomicInteger(1);
         return memberParticipantRepo.findLeaderboard(competitionId).stream()
             .map(p -> p)
@@ -320,8 +316,6 @@ public class CompetitionService {
         requireCompetitionView(c, user);
         if (isMemberCompetition(c))
             throw new IllegalArgumentException("Competencia individual no tiene ranking interno de grupo");
-
-        refreshScoresIfNeeded(c);
 
         User fullUser = userRepo.findById(user.getId()).orElse(user);
         if (fullUser.getPrimaryOrganizationalGroup() == null) return List.of();
@@ -357,7 +351,6 @@ public class CompetitionService {
         User fullUser = userRepo.findById(user.getId()).orElse(user);
         Competition c = findOrThrow(competitionId);
         requireCompetitionView(c, fullUser);
-        refreshScoresIfNeeded(c);
 
         // Competencia individual
         if (isMemberCompetition(c)) {
@@ -720,6 +713,13 @@ public class CompetitionService {
         throw new AccessDeniedException("No tienes acceso a este reto");
     }
 
+    /** Recalcula scores si están desactualizados (transacción de escritura). */
+    @Transactional
+    public void ensureScoresFresh(Long competitionId) {
+        Competition c = findOrThrow(competitionId);
+        refreshScoresIfNeeded(c);
+    }
+
     private void refreshScoresIfNeeded(Competition c) {
         autoFinishIfExpired(c);
         if (c.getStatus() == CompetitionStatus.ACTIVE && scoresNeedRefresh(c)) {
@@ -960,7 +960,6 @@ public class CompetitionService {
         if (groupContextId != null) {
             requireCompetitionVisibleFromGroup(c, groupContextId);
         }
-        refreshScoresIfNeeded(c);
 
         CompetitionDTOs.CompetitionDetailView.CompetitionDetailViewBuilder builder =
             CompetitionDTOs.CompetitionDetailView.builder()

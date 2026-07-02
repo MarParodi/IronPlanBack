@@ -91,6 +91,7 @@ public class GruposService {
     @Transactional(readOnly = true)
     public CompetitionDTOs.CompetitionDetailView getRetoDetail(Long groupId, Long competitionId, User user) {
         accessService.requireView(groupId);
+        competitionService.ensureScoresFresh(competitionId);
         return competitionService.getDetailForUser(competitionId, user, groupId);
     }
 

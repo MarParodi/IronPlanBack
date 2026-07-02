@@ -116,6 +116,7 @@ class PublicCompetitionController {
         @PathVariable Long id,
         @AuthenticationPrincipal User user
     ) {
+        competitionService.ensureScoresFresh(id);
         return ResponseEntity.ok(competitionService.getDetailForUser(id, user));
     }
 
@@ -125,6 +126,7 @@ class PublicCompetitionController {
         @PathVariable Long id,
         @AuthenticationPrincipal User user
     ) {
+        competitionService.ensureScoresFresh(id);
         return ResponseEntity.ok(competitionService.getLeaderboard(id, user));
     }
 
@@ -135,6 +137,7 @@ class PublicCompetitionController {
         @RequestParam(required = false) Level level,
         @AuthenticationPrincipal User user
     ) {
+        competitionService.ensureScoresFresh(id);
         return ResponseEntity.ok(competitionService.getMemberLeaderboard(id, user, level));
     }
  
@@ -144,6 +147,7 @@ class PublicCompetitionController {
         @PathVariable Long id,
         @AuthenticationPrincipal User user
     ) {
+        competitionService.ensureScoresFresh(id);
         return ResponseEntity.ok(competitionService.getInternalRanking(id, user));
     }
  
@@ -153,6 +157,7 @@ class PublicCompetitionController {
         @PathVariable Long id,
         @AuthenticationPrincipal User user
     ) {
+        competitionService.ensureScoresFresh(id);
         return ResponseEntity.ok(competitionService.getMyScore(id, user));
     }
  
