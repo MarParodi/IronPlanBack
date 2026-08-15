@@ -116,4 +116,15 @@ public class WorkoutExercise {
         this.status = WorkoutExerciseStatus.COMPLETED;
         this.finishedAt = LocalDateTime.now();
     }
+
+    /**
+     * Ejercicio del catálogo asociado, venga de una rutina o de un añadido puntual a la sesión.
+     * Devuelve null cuando no hay ninguno de los dos vínculos.
+     */
+    public Exercise resolveCatalogExercise() {
+        if (routineExercise != null && routineExercise.getExercise() != null) {
+            return routineExercise.getExercise();
+        }
+        return exercise;
+    }
 }
