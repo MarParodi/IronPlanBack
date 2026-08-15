@@ -4,6 +4,14 @@ import com.example.ironplan.model.*;
 import com.example.ironplan.repository.*;
 import com.example.ironplan.rest.dto.progress.*;
 import com.example.ironplan.rest.error.NotFoundException;
+import com.example.ironplan.service.progression.ProgressionContext;
+import com.example.ironplan.service.progression.ProgressionDecision;
+import com.example.ironplan.service.progression.ProgressionPolicy;
+import com.example.ironplan.service.progression.SessionPerformance;
+import com.example.ironplan.service.progression.WeightIncrementResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,24 +26,29 @@ import java.util.stream.Collectors;
 @Service
 public class ProgressService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProgressService.class);
+
+    /** Sesiones pasadas que se tienen en cuenta para recomendar progresión. */
+    private static final int RECENT_SESSIONS_ANALYZED = 3;
+
     private final ProgressRepository progressRepo;
     private final ExerciseRepository exerciseRepo;
     private final WorkoutSetRepository workoutSetRepo;
     private final NotificationService notificationService;
-
-    // Incremento de peso estándar (2.5 kg para la mayoría de ejercicios)
-    private static final double WEIGHT_INCREMENT = 2.5;
+    private final ProgressionPolicy progressionPolicy;
 
     public ProgressService(
             ProgressRepository progressRepo,
             ExerciseRepository exerciseRepo,
             WorkoutSetRepository workoutSetRepo,
-            NotificationService notificationService
+            NotificationService notificationService,
+            ProgressionPolicy progressionPolicy
     ) {
         this.progressRepo = progressRepo;
         this.exerciseRepo = exerciseRepo;
         this.workoutSetRepo = workoutSetRepo;
         this.notificationService = notificationService;
+        this.progressionPolicy = progressionPolicy;
     }
 
     // ============ RESUMEN GENERAL DE PROGRESO ============
@@ -227,149 +240,83 @@ public class ProgressService {
             int repsMin,
             int repsMax
     ) {
-        Long userId = user.getId();
-
         Exercise exercise = exerciseRepo.findById(exerciseId)
                 .orElseThrow(() -> new NotFoundException("Ejercicio no encontrado: " + exerciseId));
 
-        // Obtener últimos 3 entrenamientos de este ejercicio
-        List<WorkoutExercise> recentExercises = progressRepo.findRecentWorkoutExercises(userId, exerciseId);
-        
-        // Limitar a 3
-        recentExercises = recentExercises.stream().limit(3).toList();
-
-        if (recentExercises.isEmpty()) {
-            // Primera vez
-            return new ProgressionRecommendationDto(
-                    exerciseId,
-                    exercise.getName(),
-                    plannedSets,
-                    repsMin,
-                    repsMax,
-                    Collections.emptyList(),
-                    ProgressionRecommendationDto.RecommendationType.FIRST_TIME,
-                    "Primera vez con este ejercicio. Empieza con un peso que te permita hacer " + repsMin + "-" + repsMax + " reps con buena técnica.",
-                    null,
-                    (repsMin + repsMax) / 2
-            );
-        }
-
-        // Construir historial de rendimiento reciente
-        List<RecentPerformanceDto> recentPerformance = buildRecentPerformance(recentExercises, repsMin, repsMax);
-
-        // Aplicar algoritmo de recomendación
-        ProgressionRecommendationDto recommendation = calculateRecommendation(
-                exercise,
-                plannedSets,
-                repsMin,
-                repsMax,
-                recentPerformance
-        );
-
-        notificationService.maybeNotifyProgressionSuggestion(user, recommendation);
-
-        return recommendation;
+        return buildRecommendation(user, exercise, plannedSets, repsMin, repsMax);
     }
 
-    // ============ ALGORITMO DE RECOMENDACIÓN ============
+    /**
+     * Genera las sugerencias de progresión de una sesión recién terminada y las notifica.
+     * Se llama desde el flujo de cierre de sesión (transacción de escritura); el endpoint de
+     * consulta no debe escribir.
+     */
+    @Transactional
+    public void notifyProgressionSuggestions(WorkoutSession session) {
+        if (session == null || session.getUser() == null) return;
 
-    private ProgressionRecommendationDto calculateRecommendation(
+        List<WorkoutExercise> exercises = session.getWorkoutExercises();
+        if (exercises == null || exercises.isEmpty()) return;
+
+        for (WorkoutExercise we : exercises) {
+            try {
+                Exercise catalogExercise = we.resolveCatalogExercise();
+                if (catalogExercise == null) continue;
+
+                ProgressionRecommendationDto recommendation = buildRecommendation(
+                        session.getUser(),
+                        catalogExercise,
+                        we.getPlannedSets() != null ? we.getPlannedSets() : 1,
+                        we.getPlannedRepsMin() != null ? we.getPlannedRepsMin() : 1,
+                        we.getPlannedRepsMax() != null ? we.getPlannedRepsMax() : 1
+                );
+
+                notificationService.maybeNotifyProgressionSuggestion(session.getUser(), recommendation);
+            } catch (RuntimeException ex) {
+                // Una sugerencia fallida no debe tumbar el cierre del entrenamiento.
+                log.warn("No se pudo generar la sugerencia de progresión del ejercicio {} (sesión {})",
+                        we.getId(), session.getId(), ex);
+            }
+        }
+    }
+
+    private ProgressionRecommendationDto buildRecommendation(
+            User user,
             Exercise exercise,
             int plannedSets,
             int repsMin,
-            int repsMax,
-            List<RecentPerformanceDto> recentPerformance
+            int repsMax
     ) {
-        // Reglas de progresión:
-        // 1. Si alcanzó repsMax en 2 de los últimos 3 entrenamientos -> SUBIR PESO
-        // 2. Si no alcanzó repsMin en alguno -> BAJAR PESO
-        // 3. Si está en rango pero no alcanza repsMax -> SUBIR REPS (mantener peso)
-        // 4. Si todo bien pero no cumple criterio para subir -> MANTENER
+        int safeRepsMin = Math.max(1, repsMin);
+        int safeRepsMax = Math.max(safeRepsMin, repsMax);
 
-        int hitMaxCount = 0;
-        int missedMinCount = 0;
-        Double lastWeight = null;
-        int avgReps = 0;
-        int totalReps = 0;
-        int count = 0;
+        List<WorkoutExercise> recentExercises = progressRepo.findRecentWorkoutExercises(
+                user.getId(),
+                exercise.getId(),
+                PageRequest.of(0, RECENT_SESSIONS_ANALYZED)
+        );
 
-        for (RecentPerformanceDto perf : recentPerformance) {
-            if (perf.hitMaxReps()) hitMaxCount++;
-            if (!perf.hitMinReps()) missedMinCount++;
-            if (perf.weightKg() != null) {
-                lastWeight = perf.weightKg();
-            }
-            if (perf.avgReps() != null) {
-                totalReps += perf.avgReps();
-                count++;
-            }
-        }
+        List<SessionPerformance> recentPerformance =
+                buildRecentPerformance(recentExercises, safeRepsMin, safeRepsMax);
 
-        if (count > 0) {
-            avgReps = totalReps / count;
-        }
-
-        ProgressionRecommendationDto.RecommendationType type;
-        String message;
-        Double suggestedWeight = lastWeight;
-        Integer suggestedReps = avgReps > 0 ? avgReps : (repsMin + repsMax) / 2;
-
-        // Aplicar reglas
-        if (missedMinCount > 0) {
-            // BAJAR PESO - No alcanzó el mínimo
-            type = ProgressionRecommendationDto.RecommendationType.DECREASE_WEIGHT;
-            if (lastWeight != null) {
-                suggestedWeight = Math.max(0, lastWeight - WEIGHT_INCREMENT);
-            }
-            suggestedReps = repsMin;
-            message = String.format(
-                    "No alcanzaste %d reps en algunas series. Baja el peso a %.1f kg y enfócate en la técnica.",
-                    repsMin,
-                    suggestedWeight != null ? suggestedWeight : 0
-            );
-        } else if (hitMaxCount >= 2 && recentPerformance.size() >= 2) {
-            // SUBIR PESO - Alcanzó repsMax 2 de 3 veces
-            type = ProgressionRecommendationDto.RecommendationType.INCREASE_WEIGHT;
-            if (lastWeight != null) {
-                suggestedWeight = lastWeight + WEIGHT_INCREMENT;
-            }
-            suggestedReps = repsMin;
-            message = String.format(
-                    "¡Excelente progreso! Has alcanzado %d reps consistentemente. Sube a %.1f kg.",
-                    repsMax,
-                    suggestedWeight != null ? suggestedWeight : 0
-            );
-        } else if (avgReps < repsMax && avgReps >= repsMin) {
-            // SUBIR REPS - Está en rango pero puede mejorar
-            type = ProgressionRecommendationDto.RecommendationType.INCREASE_REPS;
-            suggestedReps = Math.min(repsMax, avgReps + 1);
-            message = String.format(
-                    "Buen trabajo. Mantén %.1f kg e intenta alcanzar %d reps en cada serie.",
-                    lastWeight != null ? lastWeight : 0,
-                    suggestedReps
-            );
-        } else {
-            // MANTENER
-            type = ProgressionRecommendationDto.RecommendationType.MAINTAIN;
-            message = String.format(
-                    "Continúa con %.1f kg x %d-%d reps. Enfócate en la calidad de cada rep.",
-                    lastWeight != null ? lastWeight : 0,
-                    repsMin,
-                    repsMax
-            );
-        }
+        ProgressionDecision decision = progressionPolicy.decide(new ProgressionContext(
+                safeRepsMin,
+                safeRepsMax,
+                WeightIncrementResolver.forPrimaryMuscle(exercise.getPrimaryMuscle()),
+                recentPerformance
+        ));
 
         return new ProgressionRecommendationDto(
                 exercise.getId(),
                 exercise.getName(),
                 plannedSets,
-                repsMin,
-                repsMax,
-                recentPerformance,
-                type,
-                message,
-                suggestedWeight,
-                suggestedReps
+                safeRepsMin,
+                safeRepsMax,
+                recentPerformance.stream().map(ProgressService::toRecentPerformanceDto).toList(),
+                decision.type(),
+                decision.message(),
+                decision.suggestedWeightKg(),
+                decision.suggestedRepsTarget()
         );
     }
 
@@ -402,41 +349,49 @@ public class ProgressService {
                 .orElse(null);
     }
 
-    private List<RecentPerformanceDto> buildRecentPerformance(
+    /**
+     * Agrega el rendimiento de cada sesión reciente. Mantiene el orden recibido
+     * (de más reciente a más antigua) y descarta las sesiones sin series completadas.
+     */
+    private List<SessionPerformance> buildRecentPerformance(
             List<WorkoutExercise> recentExercises,
             int repsMin,
             int repsMax
     ) {
-        List<RecentPerformanceDto> result = new ArrayList<>();
+        List<SessionPerformance> result = new ArrayList<>();
 
         for (WorkoutExercise we : recentExercises) {
-            List<WorkoutSet> sets = workoutSetRepo.findByWorkoutExercise_IdOrderBySetNumberAsc(we.getId());
-            
-            List<WorkoutSet> completedSets = sets.stream()
+            List<WorkoutSet> completedSets = workoutSetRepo
+                    .findByWorkoutExercise_IdOrderBySetNumberAsc(we.getId())
+                    .stream()
                     .filter(WorkoutSet::isCompleted)
                     .filter(ws -> ws.getReps() != null)
                     .toList();
 
             if (completedSets.isEmpty()) continue;
 
-            double avgWeight = completedSets.stream()
+            OptionalDouble avgWeight = completedSets.stream()
                     .filter(ws -> ws.getWeightKg() != null)
                     .mapToDouble(WorkoutSet::getWeightKg)
-                    .average()
-                    .orElse(0);
+                    .average();
 
-            double avgRepsDouble = completedSets.stream()
+            int avgReps = (int) Math.round(completedSets.stream()
                     .mapToInt(WorkoutSet::getReps)
                     .average()
-                    .orElse(0);
+                    .orElse(0));
 
-            int avgReps = (int) Math.round(avgRepsDouble);
+            int setsReachingMax = (int) completedSets.stream()
+                    .filter(ws -> ws.getReps() >= repsMax)
+                    .count();
 
-            boolean hitMaxReps = completedSets.stream()
-                    .anyMatch(ws -> ws.getReps() >= repsMax);
+            int setsBelowMin = (int) completedSets.stream()
+                    .filter(ws -> ws.getReps() < repsMin)
+                    .count();
 
-            boolean hitMinReps = completedSets.stream()
-                    .allMatch(ws -> ws.getReps() >= repsMin);
+            OptionalDouble avgRir = completedSets.stream()
+                    .filter(ws -> ws.getRirRegistrado() != null)
+                    .mapToInt(WorkoutSet::getRirRegistrado)
+                    .average();
 
             double volume = completedSets.stream()
                     .filter(ws -> ws.getWeightKg() != null)
@@ -447,18 +402,31 @@ public class ProgressService {
                     ? we.getWorkoutSession().getCompletedAt()
                     : we.getWorkoutSession().getStartedAt();
 
-            result.add(new RecentPerformanceDto(
+            result.add(new SessionPerformance(
                     date,
-                    avgWeight > 0 ? avgWeight : null,
+                    avgWeight.isPresent() && avgWeight.getAsDouble() > 0 ? avgWeight.getAsDouble() : null,
                     avgReps,
                     completedSets.size(),
-                    hitMaxReps,
-                    hitMinReps,
+                    setsReachingMax,
+                    setsBelowMin,
+                    avgRir.isPresent() ? avgRir.getAsDouble() : null,
                     volume
             ));
         }
 
         return result;
+    }
+
+    private static RecentPerformanceDto toRecentPerformanceDto(SessionPerformance performance) {
+        return new RecentPerformanceDto(
+                performance.date(),
+                performance.weightKg(),
+                performance.avgReps(),
+                performance.completedSets(),
+                performance.reachedMax(),
+                performance.metMinimumInAllSets(),
+                performance.volumeKg()
+        );
     }
 
     private List<ExerciseSessionHistoryDto> buildSessionHistory(

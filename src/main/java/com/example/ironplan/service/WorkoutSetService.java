@@ -40,6 +40,7 @@ public class WorkoutSetService {
     private final EpleyService epleyService;
     private final NotificationService notificationService;
     private final AchievementService achievementService;
+    private final ProgressService progressService;
 
 
     public WorkoutSetService(
@@ -50,7 +51,8 @@ public class WorkoutSetService {
             UserActivityRepository activityRepository,
             EpleyService epleyService,
             NotificationService notificationService,
-            AchievementService achievementService
+            AchievementService achievementService,
+            ProgressService progressService
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
@@ -60,6 +62,7 @@ public class WorkoutSetService {
         this.epleyService = epleyService;
         this.notificationService = notificationService;
         this.achievementService = achievementService;
+        this.progressService = progressService;
     }
 
     // ---------- HELPERS PRIVADOS ----------
@@ -221,6 +224,7 @@ public class WorkoutSetService {
 
             sessionRepo.save(session);
             notificationService.handleWorkoutSessionCompleted(session);
+            progressService.notifyProgressionSuggestions(session);
             achievementService.checkWorkoutAchievements(session.getUser());
             achievementService.checkXpAchievements(session.getUser());
             return;

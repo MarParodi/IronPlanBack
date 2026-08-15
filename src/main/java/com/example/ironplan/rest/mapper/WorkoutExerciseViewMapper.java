@@ -78,7 +78,7 @@ public final class WorkoutExerciseViewMapper {
                 .toList();
 
         // 6) Datos del ejercicio actual (soporte para rutina Y personalizadas)
-        Exercise currentBase = resolveCatalogExerciseSafe(exercise);
+        Exercise currentBase = exercise.resolveCatalogExercise();
 
         return new WorkoutExerciseDetailResponse(
                 session.getId(),
@@ -102,32 +102,13 @@ public final class WorkoutExerciseViewMapper {
      * Resuelve el ejercicio de catálogo, lanza excepción si no existe.
      */
     private static Exercise resolveCatalogExercise(WorkoutExercise we) {
-        if (we.getRoutineExercise() != null && we.getRoutineExercise().getExercise() != null) {
-            return we.getRoutineExercise().getExercise();
+        Exercise catalog = we.resolveCatalogExercise();
+        if (catalog == null) {
+            throw new IllegalStateException(
+                    "WorkoutExercise sin routineExercise ni exercise asociado (id=" + we.getId() + ")"
+            );
         }
-
-        if (we.getExercise() != null) {
-            return we.getExercise();
-        }
-
-        throw new IllegalStateException(
-                "WorkoutExercise sin routineExercise ni exercise asociado (id=" + we.getId() + ")"
-        );
-    }
-
-    /**
-     * Resuelve el ejercicio de catálogo, retorna null si no existe (no lanza excepción).
-     */
-    private static Exercise resolveCatalogExerciseSafe(WorkoutExercise we) {
-        if (we.getRoutineExercise() != null && we.getRoutineExercise().getExercise() != null) {
-            return we.getRoutineExercise().getExercise();
-        }
-
-        if (we.getExercise() != null) {
-            return we.getExercise();
-        }
-
-        return null;
+        return catalog;
     }
 
 }

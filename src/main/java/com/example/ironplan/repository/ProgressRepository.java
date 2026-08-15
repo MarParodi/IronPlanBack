@@ -1,6 +1,7 @@
 package com.example.ironplan.repository;
 
 import com.example.ironplan.model.WorkoutSet;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -39,21 +40,25 @@ public interface ProgressRepository extends JpaRepository<WorkoutSet, Long> {
     );
 
     /**
-     * Obtiene los últimos N workout exercises de un ejercicio específico (para recomendación)
+     * Obtiene los workout exercises más recientes de un ejercicio (para la recomendación).
+     * Cubre los dos orígenes posibles: ejercicios que vienen de una rutina (routineExercise)
+     * y ejercicios añadidos directamente a la sesión (exercise).
      */
     @Query("""
-        SELECT DISTINCT we FROM WorkoutExercise we
-        JOIN FETCH we.workoutSession s
-        JOIN FETCH we.routineExercise re
-        JOIN FETCH re.exercise ex
+        SELECT we FROM WorkoutExercise we
+        JOIN we.workoutSession s
+        LEFT JOIN we.routineExercise re
+        LEFT JOIN re.exercise routineCatalog
+        LEFT JOIN we.exercise directCatalog
         WHERE s.user.id = :userId
-          AND ex.id = :exerciseId
           AND s.status = 'COMPLETED'
+          AND (routineCatalog.id = :exerciseId OR directCatalog.id = :exerciseId)
         ORDER BY s.completedAt DESC
     """)
     List<com.example.ironplan.model.WorkoutExercise> findRecentWorkoutExercises(
             @Param("userId") Long userId,
-            @Param("exerciseId") Long exerciseId
+            @Param("exerciseId") Long exerciseId,
+            Pageable pageable
     );
 
     // ============ VOLUMEN POR SEMANA ============

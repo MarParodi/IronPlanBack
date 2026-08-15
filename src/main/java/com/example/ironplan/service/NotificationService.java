@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -264,8 +265,9 @@ public class NotificationService {
 
     /**
      * Sugerencia de progresión cuando el algoritmo recomienda subir peso.
+     * Corre en su propia transacción para que un fallo aquí no arrastre al flujo que la invoca.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void maybeNotifyProgressionSuggestion(User user, ProgressionRecommendationDto recommendation) {
         if (user == null || recommendation == null) return;
         if (recommendation.type() != ProgressionRecommendationDto.RecommendationType.INCREASE_WEIGHT) return;
