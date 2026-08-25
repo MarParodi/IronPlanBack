@@ -231,4 +231,60 @@ public class CompetitionDTOs {
         @NotNull
         private Long userId;
     }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class AdminRetoDashboard {
+        private Response competition;
+        private LocalDate weekStart;
+        private LocalDate weekEnd;
+        private int weekIndex;
+        private Double gapFirstSecond;
+        private AdminRetoKpis kpis;
+        private List<AdminRetoTeam> teams;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class AdminRetoKpis {
+        private int activeThisWeek;
+        private int totalActivities;
+        private double pointsToday;
+        private double pointsThisWeek;
+        private double avgPointsPerMember;
+        private double contributionPercent;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class AdminRetoTeam {
+        private Long groupId;
+        private String groupName;
+        private int rank;
+        private double score;
+        private double gapFromLeader;
+        private double fuerzaPoints;
+        private double librePoints;
+        private double teamBonusPoints;
+        private int rosterSize;
+        private int activeThisWeek;
+        private double participationPercent;
+        private double contributionPercent;
+        private List<AdminRetoMember> members;
+        private int totalActivities;
+        private double pointsToday;
+        private double pointsThisWeek;
+    }
+
+    @Getter @Setter @Builder
+    @NoArgsConstructor @AllArgsConstructor
+    public static class AdminRetoMember {
+        private Long userId;
+        private String fullName;
+        private double points;
+        private double fuerza;
+        private double libre;
+        private int activeDays;
+        private LocalDateTime lastActivityAt;
+    }
 }

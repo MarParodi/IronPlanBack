@@ -99,6 +99,45 @@ class RetoPointsScoringServiceTest {
     }
 
     @Test
+    @DisplayName("El desglose atribuye constancia a la modalidad con más esfuerzo")
+    void desgloseFuerzaYLibreDelEjemploCombinado() {
+        fuerza(ANA, 0, 50, true);
+        libre(ANA, 0, FreeActivityType.CAMINATA, 30);
+
+        var analisis = service.analizar(List.of(ANA, LUIS), INICIO, INICIO.plusDays(6), INICIO);
+        var ana = analisis.usuarios().get(ANA);
+
+        // Fuerza 50 min completada = 22; caminata 30 = 9; constancia 10 va a fuerza.
+        assertEquals(41, ana.puntos(), 0.5);
+        assertEquals(32, ana.fuerza(), 0.5);
+        assertEquals(9, ana.libre(), 0.5);
+        assertEquals(1, ana.diasActivos());
+        assertEquals(INICIO.atTime(10, 0), ana.lastActivityAt());
+        assertEquals(2, ana.actividadesValidas());
+        assertEquals(0, analisis.bonosDeEquipo(), 0.001, "Los bonos no se cargan al puntaje individual");
+    }
+
+    @Test
+    @DisplayName("Los bonos de equipo viven en el análisis del roster, no en los integrantes")
+    void desgloseBonosSoloANivelEquipo() {
+        for (Long usuario : List.of(ANA, LUIS)) {
+            for (int dia = 0; dia < 3; dia++) {
+                libre(usuario, dia, FreeActivityType.CAMINATA, 30);
+            }
+        }
+
+        var analisis = service.analizar(List.of(ANA, LUIS), INICIO, INICIO.plusDays(6), INICIO);
+        double individual = 3 * (10 + 9);
+
+        assertEquals(individual, analisis.usuarios().get(ANA).puntos(), 0.5);
+        assertEquals(individual, analisis.usuarios().get(LUIS).puntos(), 0.5);
+        assertEquals(70 + 25, analisis.bonosDeEquipo(), 0.5);
+        assertEquals(2 * individual + 95, analisis.puntosEquipo(), 0.5);
+        assertEquals(0, analisis.fuerzaEquipo(), 0.001);
+        assertEquals(2 * individual, analisis.libreEquipo(), 0.5);
+    }
+
+    @Test
     @DisplayName("La constancia se otorga una sola vez por día aunque haya varias actividades")
     void constanciaUnaVezPorDia() {
         libre(ANA, 0, FreeActivityType.CAMINATA, 30);

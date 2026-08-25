@@ -973,6 +973,168 @@ public class CompetitionService {
         recalculateScores(c);
         competitionRepo.save(c);
     }
+
+    @Transactional(readOnly = true)
+    public CompetitionDTOs.AdminRetoDashboard getRetoDashboard(Long competitionId, Long groupId) {
+        Competition c = findOrThrow(competitionId);
+        requireManageCompetition(c);
+        if (c.getMetricType() != MetricType.TEAM_POINTS) {
+            throw new IllegalArgumentException(
+                    "El dashboard administrativo del reto solo aplica a la métrica de puntos de reto (TEAM_POINTS)");
+        }
+
+        LocalDate start = c.getStartDate();
+        LocalDate end = effectiveEndDate(c);
+        LocalDate hoy = LocalDate.now();
+
+        List<CompetitionDTOs.AdminRetoTeam> teams = isMemberCompetition(c)
+                ? List.of(buildMemberRosterTeam(c, start, end, hoy))
+                : buildGroupTeams(c, start, end, hoy);
+
+        teams = rankTeams(teams);
+
+        Double gapFirstSecond = teams.size() >= 2
+                ? teams.get(0).getScore() - teams.get(1).getScore()
+                : (isMemberCompetition(c) ? null : 0.0);
+
+        if (groupId != null) {
+            teams = teams.stream().filter(t -> groupId.equals(t.getGroupId())).toList();
+            if (teams.isEmpty()) {
+                throw new IllegalArgumentException("El grupo no participa en esta competencia");
+            }
+        }
+
+        CompetitionDTOs.AdminRetoKpis kpis = aggregateKpis(teams);
+
+        int semanas = (int) (java.time.temporal.ChronoUnit.DAYS.between(start, end) / 7) + 1;
+        int weekIndex = Math.max(0, Math.min(semanas - 1,
+                (int) (java.time.temporal.ChronoUnit.DAYS.between(start, end) / 7)));
+        LocalDate weekStart = start.plusDays((long) weekIndex * 7);
+        LocalDate finSemana = weekStart.plusDays(6);
+        LocalDate weekEnd = finSemana.isAfter(end) ? end : finSemana;
+
+        return CompetitionDTOs.AdminRetoDashboard.builder()
+                .competition(toResponse(c))
+                .weekStart(weekStart)
+                .weekEnd(weekEnd)
+                .weekIndex(weekIndex)
+                .gapFirstSecond(gapFirstSecond)
+                .kpis(kpis)
+                .teams(teams)
+                .build();
+    }
+
+    private List<CompetitionDTOs.AdminRetoTeam> buildGroupTeams(
+            Competition c, LocalDate start, LocalDate end, LocalDate hoy) {
+        List<CompetitionDTOs.AdminRetoTeam> teams = new ArrayList<>();
+        for (CompetitionParticipant p : participantRepo.findLeaderboard(c.getId())) {
+            List<User> roster = collectUsersUnderScope(p.getGroup().getId());
+            teams.add(toAdminTeam(
+                    p.getGroup().getId(),
+                    p.getGroup().getName(),
+                    roster,
+                    retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy)
+            ));
+        }
+        return teams;
+    }
+
+    private CompetitionDTOs.AdminRetoTeam buildMemberRosterTeam(
+            Competition c, LocalDate start, LocalDate end, LocalDate hoy) {
+        List<User> roster = memberParticipantRepo.findLeaderboard(c.getId()).stream()
+                .map(CompetitionMemberParticipant::getUser)
+                .toList();
+        String name = c.getScopeReference() != null ? c.getScopeReference().getName() : "Participantes";
+        return toAdminTeam(null, name, roster,
+                retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy));
+    }
+
+    private List<Long> rosterIdsOf(List<User> roster) {
+        return roster.stream().map(User::getId).distinct().toList();
+    }
+
+    private CompetitionDTOs.AdminRetoTeam toAdminTeam(
+            Long groupId,
+            String groupName,
+            List<User> roster,
+            RetoPointsScoringService.Analisis analisis
+    ) {
+        Map<Long, User> byId = new LinkedHashMap<>();
+        for (User u : roster) byId.putIfAbsent(u.getId(), u);
+
+        List<CompetitionDTOs.AdminRetoMember> members = analisis.usuarios().values().stream()
+                .map(u -> {
+                    User user = byId.get(u.userId());
+                    String first = user != null && user.getFirstName() != null ? user.getFirstName() : "";
+                    String last = user != null && user.getLastName() != null ? user.getLastName() : "";
+                    String fullName = (first + " " + last).trim();
+                    return CompetitionDTOs.AdminRetoMember.builder()
+                            .userId(u.userId())
+                            .fullName(fullName.isEmpty() ? "Usuario" : fullName)
+                            .points(u.puntos())
+                            .fuerza(u.fuerza())
+                            .libre(u.libre())
+                            .activeDays(u.diasActivos())
+                            .lastActivityAt(u.lastActivityAt())
+                            .build();
+                })
+                .sorted((a, b) -> Double.compare(b.getPoints(), a.getPoints()))
+                .toList();
+
+        return CompetitionDTOs.AdminRetoTeam.builder()
+                .groupId(groupId)
+                .groupName(groupName)
+                .rank(0)
+                .score(analisis.puntosEquipo())
+                .gapFromLeader(0)
+                .fuerzaPoints(analisis.fuerzaEquipo())
+                .librePoints(analisis.libreEquipo())
+                .teamBonusPoints(analisis.bonosDeEquipo())
+                .rosterSize(analisis.rosterSize())
+                .activeThisWeek(analisis.activosEstaSemana())
+                .participationPercent(analisis.participacionSemanalPercent())
+                .contributionPercent(analisis.porcentajeAporte())
+                .members(members)
+                .totalActivities(analisis.totalActividades())
+                .pointsToday(analisis.puntosHoy())
+                .pointsThisWeek(analisis.puntosEstaSemana())
+                .build();
+    }
+
+    private List<CompetitionDTOs.AdminRetoTeam> rankTeams(List<CompetitionDTOs.AdminRetoTeam> teams) {
+        List<CompetitionDTOs.AdminRetoTeam> sorted = teams.stream()
+                .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
+                .toList();
+        double leader = sorted.isEmpty() ? 0 : sorted.get(0).getScore();
+        int rank = 1;
+        for (CompetitionDTOs.AdminRetoTeam t : sorted) {
+            t.setRank(rank++);
+            t.setGapFromLeader(leader - t.getScore());
+        }
+        return new ArrayList<>(sorted);
+    }
+
+    private CompetitionDTOs.AdminRetoKpis aggregateKpis(List<CompetitionDTOs.AdminRetoTeam> teams) {
+        int roster = teams.stream().mapToInt(CompetitionDTOs.AdminRetoTeam::getRosterSize).sum();
+        int active = teams.stream().mapToInt(CompetitionDTOs.AdminRetoTeam::getActiveThisWeek).sum();
+        int totalActivities = teams.stream().mapToInt(CompetitionDTOs.AdminRetoTeam::getTotalActivities).sum();
+        double pointsToday = teams.stream().mapToDouble(CompetitionDTOs.AdminRetoTeam::getPointsToday).sum();
+        double pointsThisWeek = teams.stream().mapToDouble(CompetitionDTOs.AdminRetoTeam::getPointsThisWeek).sum();
+        double points = teams.stream().mapToDouble(CompetitionDTOs.AdminRetoTeam::getScore).sum();
+        long contributors = teams.stream()
+                .flatMap(t -> t.getMembers().stream())
+                .filter(m -> m.getPoints() > 0)
+                .count();
+
+        return CompetitionDTOs.AdminRetoKpis.builder()
+                .activeThisWeek(active)
+                .totalActivities(totalActivities)
+                .pointsToday(pointsToday)
+                .pointsThisWeek(pointsThisWeek)
+                .avgPointsPerMember(roster == 0 ? 0 : points / roster)
+                .contributionPercent(roster == 0 ? 0 : (contributors * 100.0) / roster)
+                .build();
+    }
     
     @Transactional(readOnly = true)
     public List<CompetitionDTOs.RetoSummary> getRetosForOrganizationalGroup(Long groupId) {
