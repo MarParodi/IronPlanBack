@@ -92,6 +92,15 @@ class AdminCompetitionController {
     ) {
         return ResponseEntity.ok(podiumService.declareWinner(id, request, user));
     }
+
+    @GetMapping("/{id}/reto-dashboard")
+    public ResponseEntity<CompetitionDTOs.AdminRetoDashboard> getRetoDashboard(
+        @PathVariable Long id,
+        @RequestParam(required = false) Long groupId
+    ) {
+        competitionService.ensureScoresFresh(id);
+        return ResponseEntity.ok(competitionService.getRetoDashboard(id, groupId));
+    }
 }
  
 // ─── Público (usuario autenticado) ────────────────────────────────────────────
