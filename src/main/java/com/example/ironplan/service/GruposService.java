@@ -55,6 +55,7 @@ public class GruposService {
             .active(group.getActive())
             .role(role != null ? role.name() : null)
             .canManage(accessService.canManageGroup(user, group.getId()))
+            .canLeave(membershipService.canLeave(user, groupId))
             .memberCount(membershipService.countMembersForScope(groupId))
             .activeCompetitionsCount(activeCompetitions)
             .hierarchyPath(membershipService.buildHierarchyPath(group))
@@ -64,7 +65,8 @@ public class GruposService {
     @Transactional(readOnly = true)
     public List<GrupoDTOs.MemberItem> listMembers(Long groupId, User user) {
         accessService.requireView(groupId);
-        return membershipService.listGroupMembers(groupId);
+        boolean includeDescendants = accessService.canManageGroup(user, groupId);
+        return membershipService.listGroupMembers(groupId, includeDescendants);
     }
 
     @Transactional
@@ -75,6 +77,11 @@ public class GruposService {
     @Transactional
     public void removeMember(Long groupId, Long targetUserId, User user) {
         membershipService.removeMember(groupId, targetUserId, user);
+    }
+
+    @Transactional
+    public void leaveGroup(Long groupId, User user) {
+        membershipService.leaveGroup(groupId, user);
     }
 
     @Transactional

@@ -31,6 +31,7 @@ public class GrupoDTOs {
         private String groupType;
         private String role;
         private boolean canManage;
+        private boolean canLeave;
         private int memberCount;
         private int activeCompetitionsCount;
         private HierarchyPath hierarchyPath;
@@ -45,6 +46,7 @@ public class GrupoDTOs {
         private boolean active;
         private String role;
         private boolean canManage;
+        private boolean canLeave;
         private int memberCount;
         private int activeCompetitionsCount;
         private HierarchyPath hierarchyPath;
