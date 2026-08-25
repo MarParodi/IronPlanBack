@@ -105,31 +105,29 @@ public class AuthService {
         String email = normalizeEmail(req.getEmail());
         String username = normalizeUsername(req.getUsername());
 
-        if (userRepo.existsByEmail(email) || onboardingRepo.existsByEmail(email)) {
+        // Solo un usuario ya creado bloquea email/username.
+        // Una sesión de onboarding incompleta no reserva el correo: se reutiliza.
+        if (userRepo.existsByEmail(email)) {
             throw new IllegalArgumentException("El email ya está registrado.");
         }
-        if (userRepo.existsByUsername(username) || onboardingRepo.existsByUsername(username)) {
+        if (userRepo.existsByUsername(username)) {
             throw new IllegalArgumentException("El nombre de usuario ya está en uso.");
         }
 
-        String token = UUID.randomUUID().toString();
         Instant now = Instant.now();
         Instant expiresAt = now.plus(24, ChronoUnit.HOURS);
 
-        OnboardingSession session = OnboardingSession.builder()
-                .token(token)
-                .createdAt(now)
-                .expiresAt(expiresAt)
-                .completedStep(1)
-                .firstName(req.getFirstName().trim())
-                .lastName(req.getLastName().trim())
-                .email(email)
-                .username(username)
-                .passwordHash(encoder.encode(req.getPassword()))
-                .build();
+        OnboardingSession session = reuseOrCreateOnboardingSession(email, username, now, expiresAt);
+        session.setExpiresAt(expiresAt);
+        session.setCompletedStep(1);
+        session.setFirstName(req.getFirstName().trim());
+        session.setLastName(req.getLastName().trim());
+        session.setEmail(email);
+        session.setUsername(username);
+        session.setPasswordHash(encoder.encode(req.getPassword()));
 
         onboardingRepo.save(session);
-        return new RegisterStep1Resp(token, expiresAt.toEpochMilli());
+        return new RegisterStep1Resp(session.getToken(), expiresAt.toEpochMilli());
     }
 
     // -------- ONBOARDING: PASO 2 --------
@@ -271,6 +269,33 @@ public class AuthService {
         long expiresAt = Instant.now().toEpochMilli() + expirationMs;
 
         return new AuthResp(token, "Bearer", user.getRole().name(), expiresAt);
+    }
+
+    /**
+     * Reusa la sesión incompleta del mismo email. Si el username pertenece a otra
+     * sesión de onboarding (no a un User), esa sesión se elimina para no bloquear el alta.
+     */
+    private OnboardingSession reuseOrCreateOnboardingSession(
+            String email, String username, Instant now, Instant expiresAt) {
+        onboardingRepo.findFirstByUsernameOrderByCreatedAtDesc(username)
+                .filter(other -> !email.equals(other.getEmail()))
+                .ifPresent(other -> {
+                    onboardingRepo.deleteById(other.getToken());
+                    onboardingRepo.flush();
+                });
+
+        return onboardingRepo.findFirstByEmailOrderByCreatedAtDesc(email)
+                .orElseGet(() -> OnboardingSession.builder()
+                        .token(UUID.randomUUID().toString())
+                        .createdAt(now)
+                        .expiresAt(expiresAt)
+                        .completedStep(1)
+                        .email(email)
+                        .username(username)
+                        .firstName("")
+                        .lastName("")
+                        .passwordHash("")
+                        .build());
     }
 
     // -------- Helpers --------
