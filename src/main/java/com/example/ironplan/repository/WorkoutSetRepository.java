@@ -85,5 +85,26 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
             @Param("startDate") java.time.LocalDate startDate,
             @Param("endDate") java.time.LocalDate endDate
     );
+
+    /** Mejor 1RM por usuario y día para todo un roster (scoring TEAM_POINTS). */
+    @Query("""
+        SELECT new com.example.ironplan.repository.projection.OneRmDiarioUsuario(
+            s.user.id, CAST(s.completedAt AS localdate), MAX(ws.oneRmEstimado))
+        FROM WorkoutSet ws
+        JOIN ws.workoutExercise we
+        JOIN we.workoutSession s
+        WHERE s.user.id IN :userIds
+          AND s.status = com.example.ironplan.model.WorkoutSessionStatus.COMPLETED
+          AND ws.completed = true
+          AND ws.oneRmEstimado IS NOT NULL
+          AND CAST(s.completedAt AS localdate) >= :startDate
+          AND CAST(s.completedAt AS localdate) <= :endDate
+        GROUP BY s.user.id, CAST(s.completedAt AS localdate)
+        """)
+    List<com.example.ironplan.repository.projection.OneRmDiarioUsuario> findDailyMaxOneRmForUsers(
+            @Param("userIds") java.util.Collection<Long> userIds,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate
+    );
 }
 
