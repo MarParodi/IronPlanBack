@@ -74,6 +74,15 @@ public class GruposController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{groupId}/salir")
+    public ResponseEntity<Void> salir(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long groupId
+    ) {
+        gruposService.leaveGroup(groupId, user);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{groupId}/retos")
     public ResponseEntity<List<CompetitionDTOs.RetoSummary>> retos(
             @AuthenticationPrincipal User user,

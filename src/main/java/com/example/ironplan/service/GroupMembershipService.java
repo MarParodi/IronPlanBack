@@ -157,10 +157,30 @@ public class GroupMembershipService {
             .count();
     }
 
-    public List<GrupoDTOs.MemberItem> listGroupMembers(Long groupId) {
-        return memberRepo.findActiveByGroupIdWithGroup(groupId).stream()
+    public List<GrupoDTOs.MemberItem> listGroupMembers(Long groupId, boolean includeDescendants) {
+        if (!includeDescendants) {
+            return memberRepo.findActiveByGroupIdWithGroup(groupId).stream()
+                .map(this::toMemberItem)
+                .toList();
+        }
+        List<Long> scopeIds = accessService.collectTreeGroupIds(groupId);
+        if (scopeIds.isEmpty()) return List.of();
+        return memberRepo.findActiveByGroupIdsWithGroup(scopeIds).stream()
             .map(this::toMemberItem)
             .toList();
+    }
+
+    public boolean canLeave(User user, Long groupId) {
+        if (user == null || groupId == null) return false;
+        Optional<OrganizationalGroupMember> membership = getMembership(user.getId(), groupId);
+        if (membership.isEmpty()) return false;
+        OrganizationalGroupMember m = membership.get();
+        if (accessService.isOrganizationCreator(user, m.getGroup())) return false;
+        if (m.getRole() == GroupMembershipRole.ADMIN
+            && memberRepo.countByGroupIdAndActiveTrueAndRole(groupId, GroupMembershipRole.ADMIN) <= 1) {
+            return false;
+        }
+        return true;
     }
 
     @Transactional
@@ -214,15 +234,36 @@ public class GroupMembershipService {
             throw new IllegalArgumentException("No puedes eliminar al único administrador del grupo");
         }
 
-        OrganizationalGroup group = m.getGroup();
-        if (accessService.isOrganizationCreator(m.getUser(), group)) {
+        if (accessService.isOrganizationCreator(m.getUser(), m.getGroup())) {
             throw new IllegalArgumentException("No puedes dar de baja al creador de la organización");
         }
 
+        deactivateMembership(m);
+    }
+
+    @Transactional
+    public void leaveGroup(Long groupId, User actor) {
+        OrganizationalGroupMember m = memberRepo.findByUserIdAndGroupIdAndActiveTrue(actor.getId(), groupId)
+            .orElseThrow(() -> new IllegalArgumentException("No perteneces a este grupo"));
+
+        if (accessService.isOrganizationCreator(actor, m.getGroup())) {
+            throw new IllegalArgumentException("El creador de la organización no puede salir del grupo");
+        }
+        if (m.getRole() == GroupMembershipRole.ADMIN
+            && memberRepo.countByGroupIdAndActiveTrueAndRole(groupId, GroupMembershipRole.ADMIN) <= 1) {
+            throw new IllegalArgumentException("No puedes salir siendo el único administrador del grupo");
+        }
+
+        deactivateMembership(m);
+    }
+
+    private void deactivateMembership(OrganizationalGroupMember m) {
+        Long groupId = m.getGroup().getId();
+        Long userId = m.getUser().getId();
         m.setActive(false);
         memberRepo.save(m);
 
-        User target = userRepo.findById(targetUserId).orElseThrow();
+        User target = userRepo.findById(userId).orElseThrow();
         if (target.getPrimaryOrganizationalGroup() != null
             && target.getPrimaryOrganizationalGroup().getId().equals(groupId)) {
             target.setPrimaryOrganizationalGroup(null);
@@ -293,6 +334,7 @@ public class GroupMembershipService {
             .groupType(group.getGroupType().name())
             .role(role != null ? role.name() : m.getRole().name())
             .canManage(accessService.canManageGroup(user, group.getId()))
+            .canLeave(canLeave(user, group.getId()))
             .memberCount(countMembersInSubtree(group.getId()))
             .activeCompetitionsCount(0)
             .hierarchyPath(path)
@@ -308,6 +350,7 @@ public class GroupMembershipService {
             .groupType(root.getGroupType().name())
             .role(GroupMembershipRole.ADMIN.name())
             .canManage(true)
+            .canLeave(canLeave(user, root.getId()))
             .memberCount(countMembersInSubtree(root.getId()))
             .activeCompetitionsCount(0)
             .hierarchyPath(path)

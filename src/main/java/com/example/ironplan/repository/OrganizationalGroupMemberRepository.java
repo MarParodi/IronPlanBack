@@ -46,5 +46,15 @@ public interface OrganizationalGroupMemberRepository extends JpaRepository<Organ
         """)
     List<OrganizationalGroupMember> findActiveByGroupIdWithGroup(@Param("groupId") Long groupId);
 
+    @Query("""
+        SELECT m FROM OrganizationalGroupMember m
+        JOIN FETCH m.user u
+        JOIN FETCH m.group g
+        LEFT JOIN FETCH g.parent
+        WHERE m.group.id IN :groupIds AND m.active = true
+        ORDER BY g.name ASC, m.role ASC, m.joinedAt ASC
+        """)
+    List<OrganizationalGroupMember> findActiveByGroupIdsWithGroup(@Param("groupIds") List<Long> groupIds);
+
     long countByGroupIdAndActiveTrue(Long groupId);
 }
