@@ -39,6 +39,7 @@ public class CompetitionService {
     private final OrganizationalGroupMemberRepository    memberRepo;
     private final NotificationService                    notificationService;
     private final LeaderboardCacheEvictor                leaderboardCacheEvictor;
+    private final RetoPointsScoringService               retoPointsScoringService;
  
     // ─── Admin: Listar ────────────────────────────────────────────────────────
  
@@ -648,15 +649,25 @@ public class CompetitionService {
     private void recalculateScores(Competition c) {
         LocalDate start = c.getStartDate();
         LocalDate end   = effectiveEndDate(c);
+        boolean teamPoints = c.getMetricType() == MetricType.TEAM_POINTS;
  
         if (isMemberCompetition(c)) {
             List<CompetitionMemberParticipant> members = memberParticipantRepo.findLeaderboard(c.getId());
             Map<Long, Integer> previousRanks = members.stream()
                 .filter(p -> p.getRank() != null)
                 .collect(Collectors.toMap(p -> p.getUser().getId(), CompetitionMemberParticipant::getRank));
+
+            // TEAM_POINTS resuelve todo el roster de una vez; el resto suma por participante.
+            Map<Long, Double> teamPointsByUser = teamPoints
+                ? retoPointsScoringService.scoreUsers(
+                    members.stream().map(p -> p.getUser().getId()).distinct().toList(), start, end)
+                : Map.of();
+
             int rank = 1;
             for (CompetitionMemberParticipant p : members) {
-                Double score = activityRepo.sumUserScore(p.getUser().getId(), c.getMetricType(), start, end);
+                Double score = teamPoints
+                    ? teamPointsByUser.get(p.getUser().getId())
+                    : activityRepo.sumUserScore(p.getUser().getId(), c.getMetricType(), start, end);
                 p.setScore(score != null ? score : 0.0);
                 p.setRank(rank);
                 notifyRankChange(p.getUser(), c.getName(), previousRanks.get(p.getUser().getId()), rank);
@@ -668,7 +679,9 @@ public class CompetitionService {
             List<CompetitionParticipant> participants = participantRepo.findLeaderboard(c.getId());
             int rank = 1;
             for (CompetitionParticipant p : participants) {
-                Double score = activityRepo.sumGroupScore(p.getGroup().getId(), c.getMetricType().name(), start, end);
+                Double score = teamPoints
+                    ? retoPointsScoringService.scoreTeam(rosterIds(p.getGroup().getId()), start, end)
+                    : activityRepo.sumGroupScore(p.getGroup().getId(), c.getMetricType().name(), start, end);
                 p.setGroupScore(score != null ? score : 0.0);
                 p.setRank(rank++);
                 p.setLastCalculatedAt(LocalDateTime.now());
@@ -676,6 +689,14 @@ public class CompetitionService {
             participantRepo.saveAll(participants);
         }
         leaderboardCacheEvictor.evictForCompetition(c.getId());
+    }
+
+    /** Integrantes de un grupo participante, incluyendo los de sus subgrupos. */
+    private List<Long> rosterIds(Long groupId) {
+        return collectUsersUnderScope(groupId).stream()
+            .map(User::getId)
+            .distinct()
+            .toList();
     }
  
     private void requireManageCompetition(Competition competition) {
@@ -765,10 +786,23 @@ public class CompetitionService {
         LocalDate start = c.getStartDate();
         LocalDate end   = effectiveEndDate(c);
 
+        // TEAM_POINTS no vive en user_activities: incluye a todo el roster, también
+        // a quienes aún no puntúan, porque los bonos de equipo dependen de ellos.
+        List<Map.Entry<Long, Double>> ordenado;
+        if (c.getMetricType() == MetricType.TEAM_POINTS) {
+            ordenado = retoPointsScoringService.scoreUsers(userIds, start, end).entrySet().stream()
+                .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
+                .collect(Collectors.toList());
+        } else {
+            ordenado = activityRepo.rankUsersByMetric(userIds, c.getMetricType(), start, end).stream()
+                .map(r -> Map.entry((Long) r[0], r[1] != null ? ((Number) r[1]).doubleValue() : 0.0))
+                .collect(Collectors.toList());
+        }
+
         AtomicInteger pos = new AtomicInteger(1);
-        return activityRepo.rankUsersByMetric(userIds, c.getMetricType(), start, end).stream()
-            .map(r -> {
-                Long uid = (Long) r[0];
+        return ordenado.stream()
+            .map(e -> {
+                Long uid = e.getKey();
                 User u = userById.get(uid);
                 if (u == null) u = userRepo.findById(uid).orElse(null);
                 String fullName = u != null ? u.getFirstName() + " " + u.getLastName() : "Usuario";
@@ -778,7 +812,7 @@ public class CompetitionService {
                     .fullName(fullName)
                     .username(u != null ? u.getDisplayUsername() : null)
                     .profilePictureUrl(u != null ? u.getProfilePictureUrl() : null)
-                    .score(r[1] != null ? ((Number) r[1]).doubleValue() : 0.0)
+                    .score(e.getValue())
                     .build();
             })
             .collect(Collectors.toList());
@@ -900,6 +934,7 @@ public class CompetitionService {
             case FREE_ACTIVITY_COUNT -> "Actividades libres";
             case FREE_ACTIVITY_KM -> "Kilómetros (actividad libre)";
             case VOLUME_TOTAL -> "Volumen total (kg)";
+            case TEAM_POINTS -> "Puntos de reto (Tipo Grupal)";
         };
     }
 

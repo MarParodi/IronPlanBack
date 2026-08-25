@@ -38,6 +38,7 @@ public class DevMetricsEnhancer implements CommandLineRunner {
     private final CompetitionRepository competitionRepository;
     private final CompetitionParticipantRepository competitionParticipantRepository;
     private final CompetitionMemberParticipantRepository competitionMemberParticipantRepository;
+    private final com.example.ironplan.service.RetoPointsScoringService retoPointsScoringService;
     private final PasswordEncoder passwordEncoder;
 
     public DevMetricsEnhancer(
@@ -49,6 +50,7 @@ public class DevMetricsEnhancer implements CommandLineRunner {
             CompetitionRepository competitionRepository,
             CompetitionParticipantRepository competitionParticipantRepository,
             CompetitionMemberParticipantRepository competitionMemberParticipantRepository,
+            com.example.ironplan.service.RetoPointsScoringService retoPointsScoringService,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.groupRepository = groupRepository;
@@ -58,6 +60,7 @@ public class DevMetricsEnhancer implements CommandLineRunner {
         this.competitionRepository = competitionRepository;
         this.competitionParticipantRepository = competitionParticipantRepository;
         this.competitionMemberParticipantRepository = competitionMemberParticipantRepository;
+        this.retoPointsScoringService = retoPointsScoringService;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -281,14 +284,21 @@ public class DevMetricsEnhancer implements CommandLineRunner {
     private void recalculateScores(Competition c) {
         LocalDate start = c.getStartDate();
         LocalDate end = effectiveEndDate(c);
+        boolean teamPoints = c.getMetricType() == MetricType.TEAM_POINTS;
 
         if (c.getScopeLevel() == ScopeLevel.GRUPO) {
             List<CompetitionMemberParticipant> members =
                     competitionMemberParticipantRepository.findLeaderboard(c.getId());
+            java.util.Map<Long, Double> teamPointsByUser = teamPoints
+                    ? retoPointsScoringService.scoreUsers(
+                        members.stream().map(p -> p.getUser().getId()).distinct().toList(), start, end)
+                    : java.util.Map.of();
             int rank = 1;
             for (CompetitionMemberParticipant p : members) {
-                Double score = activityRepository.sumUserScore(
-                        p.getUser().getId(), c.getMetricType(), start, end);
+                Double score = teamPoints
+                        ? teamPointsByUser.get(p.getUser().getId())
+                        : activityRepository.sumUserScore(
+                            p.getUser().getId(), c.getMetricType(), start, end);
                 p.setScore(score != null ? score : 0.0);
                 p.setRank(rank++);
                 p.setLastCalculatedAt(LocalDateTime.now());
@@ -299,14 +309,28 @@ public class DevMetricsEnhancer implements CommandLineRunner {
                     competitionParticipantRepository.findLeaderboard(c.getId());
             int rank = 1;
             for (CompetitionParticipant p : participants) {
-                Double score = activityRepository.sumGroupScore(
-                        p.getGroup().getId(), c.getMetricType().name(), start, end);
+                Double score = teamPoints
+                        ? retoPointsScoringService.scoreTeam(rosterIds(p.getGroup().getId()), start, end)
+                        : activityRepository.sumGroupScore(
+                            p.getGroup().getId(), c.getMetricType().name(), start, end);
                 p.setGroupScore(score != null ? score : 0.0);
                 p.setRank(rank++);
                 p.setLastCalculatedAt(LocalDateTime.now());
             }
             competitionParticipantRepository.saveAll(participants);
         }
+    }
+
+    private List<Long> rosterIds(Long groupId) {
+        List<User> users = new ArrayList<>();
+        collectUsersRecursive(groupId, users);
+        return users.stream().map(User::getId).distinct().toList();
+    }
+
+    private void collectUsersRecursive(Long groupId, List<User> result) {
+        result.addAll(userRepository.findByPrimaryOrganizationalGroupId(groupId));
+        groupRepository.findByParentId(groupId)
+                .forEach(child -> collectUsersRecursive(child.getId(), result));
     }
 
     private LocalDate effectiveEndDate(Competition c) {

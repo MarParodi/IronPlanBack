@@ -126,4 +126,21 @@ public interface UserActivityRepository extends JpaRepository<UserActivity, Long
 
     @Query("SELECT MAX(a.activityDate) FROM UserActivity a WHERE a.user.id = :userId")
     LocalDate findLastActivityDate(@Param("userId") Long userId);
+
+    /** Métrica agrupada por usuario y día para todo un roster (scoring TEAM_POINTS). */
+    @Query("""
+        SELECT new com.example.ironplan.repository.projection.MetricaDiariaUsuario(
+            a.user.id, a.activityDate, COALESCE(SUM(a.metricValue), 0.0))
+        FROM UserActivity a
+        WHERE a.user.id IN :userIds
+          AND a.metricType = :metricType
+          AND a.activityDate BETWEEN :startDate AND :endDate
+        GROUP BY a.user.id, a.activityDate
+        """)
+    List<com.example.ironplan.repository.projection.MetricaDiariaUsuario> sumDailyMetricByUser(
+        @Param("userIds") java.util.Collection<Long> userIds,
+        @Param("metricType") MetricType metricType,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
 }

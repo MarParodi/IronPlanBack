@@ -94,9 +94,16 @@ public class FreeActivityService {
         double minutes = durationSeconds / 60.0;
         double factor = switch (type) {
             case RUNNING -> 10.0;
+            case BOX -> 10.0;
+            case FUTBOL -> 9.0;
             case NATACION -> 9.0;
             case BICICLETA_ESTATICA -> 7.0;
+            case ELIPTICA -> 7.0;
+            case CLASE_GRUPAL -> 7.0;
+            case BAILE -> 6.5;
             case CAMINADORA -> 5.0;
+            case CAMINATA -> 4.5;
+            case YOGA -> 3.5;
             case OTRA -> 6.0;
         };
         return (int) Math.round(minutes * factor);
