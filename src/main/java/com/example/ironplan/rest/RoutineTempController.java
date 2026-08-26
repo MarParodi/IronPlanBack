@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -57,12 +58,14 @@ public class RoutineTempController {
 
     @PostMapping("/upload-image")
     public Map<String, Object> uploadRoutineImage(@RequestParam("file") MultipartFile file) throws IOException {
-        Map uploadResult = cloudinaryService.upload(file, "routines");
-        // Cloudinary normalmente regresa "secure_url"
-        return Map.of(
-                "url", uploadResult.get("secure_url"),
-                "publicId", uploadResult.get("public_id")
-        );
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("El archivo de imagen está vacío.");
+        }
+        Map<?, ?> uploadResult = cloudinaryService.upload(file, "routines");
+        Map<String, Object> body = new HashMap<>();
+        body.put("url", uploadResult.get("secure_url"));
+        body.put("publicId", uploadResult.get("public_id"));
+        return body;
     }
 
 //desbloquear rutina con xp
