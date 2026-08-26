@@ -6,8 +6,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Map;
 
@@ -17,19 +15,22 @@ public class CloudinaryService {
     @Autowired
     private Cloudinary cloudinary;
 
-    public Map upload(MultipartFile multipartFile, String folder) throws IOException {
-        File file = convert(multipartFile);
-        // folder ayuda a organizar: "profiles", "routines", etc.
-        Map result = cloudinary.uploader().upload(file, ObjectUtils.asMap("folder", folder));
-        file.delete(); // Borra el archivo temporal
-        return result;
-    }
+    public Map<?, ?> upload(MultipartFile multipartFile, String folder) throws IOException {
+        if (multipartFile == null || multipartFile.isEmpty()) {
+            throw new IllegalArgumentException("El archivo de imagen está vacío.");
+        }
 
-    private File convert(MultipartFile multipartFile) throws IOException {
-        File file = new File(multipartFile.getOriginalFilename());
-        FileOutputStream fo = new FileOutputStream(file);
-        fo.write(multipartFile.getBytes());
-        fo.close();
-        return file;
+        Map<?, ?> result = cloudinary.uploader().upload(
+                multipartFile.getBytes(),
+                ObjectUtils.asMap(
+                        "folder", folder,
+                        "resource_type", "image"
+                )
+        );
+
+        if (result == null || result.get("secure_url") == null) {
+            throw new IOException("Cloudinary no devolvió la URL de la imagen.");
+        }
+        return result;
     }
 }
