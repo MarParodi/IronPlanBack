@@ -52,23 +52,37 @@ public class JwtService {
 
     /** Extrae el “subject” (email o username según tu AuthService) */
     public String extractUsername(String token) {
-        return extractAllClaims(token).getSubject();
+        return parseClaims(token).getSubject();
     }
 
-    /** Valida firma, expiración y coincidencia del subject */
-    public boolean isValid(String token, String expectedSubject) {
-        Claims claims = extractAllClaims(token);
-        boolean notExpired = claims.getExpiration() != null && claims.getExpiration().after(new Date());
-        boolean subjectMatches = expectedSubject == null || expectedSubject.equals(claims.getSubject());
-        return notExpired && subjectMatches;
-    }
-
-    /** Decodifica el JWT y devuelve todos los claims */
-    private Claims extractAllClaims(String token) {
+    /** Valida firma y expiración. Lanza si el token es inválido. */
+    public Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
                 .parseSignedClaims(token)
-                .getPayload(); // en 0.12.x es getPayload()
+                .getPayload();
+    }
+
+    public Long extractUserId(Claims claims) {
+        Object uid = claims.get("uid");
+        if (uid instanceof Number n) return n.longValue();
+        if (uid instanceof String s && !s.isBlank()) {
+            return Long.parseLong(s);
+        }
+        return null;
+    }
+
+    public String extractRole(Claims claims) {
+        Object role = claims.get("role");
+        return role != null ? role.toString() : null;
+    }
+
+    /** Valida firma, expiración y coincidencia del subject */
+    public boolean isValid(String token, String expectedSubject) {
+        Claims claims = parseClaims(token);
+        boolean notExpired = claims.getExpiration() != null && claims.getExpiration().after(new Date());
+        boolean subjectMatches = expectedSubject == null || expectedSubject.equals(claims.getSubject());
+        return notExpired && subjectMatches;
     }
 }
