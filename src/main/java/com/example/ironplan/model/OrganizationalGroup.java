@@ -60,6 +60,9 @@ public class OrganizationalGroup {
 	    @ManyToOne(fetch = FetchType.LAZY)
 	    @JoinColumn(name = "created_by_user_id")
 	    private User createdBy;
+
+	    @Column(name = "photo_url", length = 500)
+	    private String photoUrl;
 	 
 	    @PrePersist
 	    protected void onCreate() {

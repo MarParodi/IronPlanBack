@@ -59,6 +59,7 @@ public class GruposService {
             .memberCount(membershipService.countMembersForScope(groupId))
             .activeCompetitionsCount(activeCompetitions)
             .hierarchyPath(membershipService.buildHierarchyPath(group))
+            .photoUrl(group.getPhotoUrl())
             .build();
     }
 

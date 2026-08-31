@@ -50,6 +50,7 @@ public class GrupoDTOs {
         private int memberCount;
         private int activeCompetitionsCount;
         private HierarchyPath hierarchyPath;
+        private String photoUrl;
     }
 
     @Getter @Setter @Builder
