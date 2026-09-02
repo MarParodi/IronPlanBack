@@ -5,6 +5,7 @@ import com.example.ironplan.repository.FreeActivitySessionRepository;
 import com.example.ironplan.repository.UserActivityRepository;
 import com.example.ironplan.rest.dto.CreateFreeActivityRequest;
 import com.example.ironplan.rest.dto.FreeActivityResponse;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +59,13 @@ public class FreeActivityService {
         return repo.findByUser_IdOrderByCompletedAtDesc(user.getId()).stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FreeActivityResponse getById(User user, Long id) {
+        FreeActivitySession session = repo.findByIdAndUser_Id(id, user.getId())
+                .orElseThrow(() -> new EntityNotFoundException("Actividad libre no encontrada: " + id));
+        return toResponse(session);
     }
 
     private void recordActivities(User user, FreeActivitySession session) {

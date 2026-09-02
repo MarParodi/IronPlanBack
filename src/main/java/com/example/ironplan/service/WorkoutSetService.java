@@ -15,6 +15,8 @@ import com.example.ironplan.rest.error.NotFoundException;
 import com.example.ironplan.rest.dto.WorkoutSetInput;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -38,9 +40,7 @@ public class WorkoutSetService {
     private final XpService xpService;
     private final UserActivityRepository activityRepository;
     private final EpleyService epleyService;
-    private final NotificationService notificationService;
-    private final AchievementService achievementService;
-    private final ProgressService progressService;
+    private final WorkoutSessionCompletedHooks sessionCompletedHooks;
 
 
     public WorkoutSetService(
@@ -50,9 +50,7 @@ public class WorkoutSetService {
             XpService xpService,
             UserActivityRepository activityRepository,
             EpleyService epleyService,
-            NotificationService notificationService,
-            AchievementService achievementService,
-            ProgressService progressService
+            WorkoutSessionCompletedHooks sessionCompletedHooks
     ) {
         this.sessionRepo = sessionRepo;
         this.workoutExerciseRepo = workoutExerciseRepo;
@@ -60,9 +58,7 @@ public class WorkoutSetService {
         this.xpService = xpService;
         this.activityRepository = activityRepository;
         this.epleyService = epleyService;
-        this.notificationService = notificationService;
-        this.achievementService = achievementService;
-        this.progressService = progressService;
+        this.sessionCompletedHooks = sessionCompletedHooks;
     }
 
     // ---------- HELPERS PRIVADOS ----------
@@ -223,18 +219,26 @@ public class WorkoutSetService {
             }
 
             sessionRepo.save(session);
-            notificationService.handleWorkoutSessionCompleted(session);
-            progressService.notifyProgressionSuggestions(session);
-            achievementService.checkWorkoutAchievements(session.getUser());
-            achievementService.checkXpAchievements(session.getUser());
+            scheduleSessionCompletedHooks(session.getId());
             return;
         }
 
         sessionRepo.save(session);
     }
-    
-    
-    
+
+    private void scheduleSessionCompletedHooks(Long sessionId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sessionCompletedHooks.run(sessionId);
+                }
+            });
+            return;
+        }
+        sessionCompletedHooks.run(sessionId);
+    }
+
     private void recordUserActivity(WorkoutSession session) {
         User user = session.getUser();
         LocalDate today = session.getCompletedAt() != null 

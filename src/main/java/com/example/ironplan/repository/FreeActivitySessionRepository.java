@@ -9,8 +9,11 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface FreeActivitySessionRepository extends JpaRepository<FreeActivitySession, Long> {
+
+    Optional<FreeActivitySession> findByIdAndUser_Id(Long id, Long userId);
 
     List<FreeActivitySession> findByUser_IdOrderByCompletedAtDesc(Long userId);
 

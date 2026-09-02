@@ -348,7 +348,11 @@ public class WorkoutSessionService {
     @Transactional
     public void finishSession(Long sessionId, Long userId) {
         var session = getSessionForUser(sessionId, userId);
-        
+
+        if (session.getStatus() == WorkoutSessionStatus.COMPLETED) {
+            return;
+        }
+
         // Solo se puede finalizar sesiones activas
         if (session.getStatus() != WorkoutSessionStatus.ACTIVE) {
             throw new IllegalStateException("Solo se pueden finalizar sesiones activas");

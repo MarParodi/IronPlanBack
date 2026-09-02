@@ -33,4 +33,12 @@ public class FreeActivityController {
     public ResponseEntity<List<FreeActivityResponse>> listMine(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(freeActivityService.listMine(user));
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<FreeActivityResponse> getById(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(freeActivityService.getById(user, id));
+    }
 }
