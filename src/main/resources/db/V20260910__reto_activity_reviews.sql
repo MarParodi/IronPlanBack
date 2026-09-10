@@ -1,3 +1,6 @@
+-- Historial/validación admin. En prod ddl-auto=validate exige la tabla al arrancar.
+-- El deploy también la crea solo si falta (CreateRetoActivityReviewsTable).
+
 CREATE TABLE IF NOT EXISTS reto_activity_reviews (
     id BIGINT NOT NULL AUTO_INCREMENT,
     competition_id BIGINT NOT NULL,
