@@ -1024,6 +1024,45 @@ public class CompetitionService {
                 .build();
     }
 
+    public record RetoAdminScope(
+            Competition competition,
+            LocalDate start,
+            LocalDate end,
+            List<User> roster
+    ) {
+        public List<Long> userIds() {
+            return roster.stream().map(User::getId).distinct().toList();
+        }
+
+        public User findUser(Long userId) {
+            return roster.stream().filter(u -> u.getId().equals(userId)).findFirst().orElse(null);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public RetoAdminScope requireRetoAdminScope(Long competitionId) {
+        Competition c = findOrThrow(competitionId);
+        requireManageCompetition(c);
+        if (c.getMetricType() != MetricType.TEAM_POINTS) {
+            throw new IllegalArgumentException(
+                    "El dashboard administrativo del reto solo aplica a la métrica de puntos de reto (TEAM_POINTS)");
+        }
+        return new RetoAdminScope(c, c.getStartDate(), effectiveEndDate(c), collectAllRosterUsers(c));
+    }
+
+    private List<User> collectAllRosterUsers(Competition c) {
+        if (isMemberCompetition(c)) {
+            return memberParticipantRepo.findLeaderboard(c.getId()).stream()
+                    .map(CompetitionMemberParticipant::getUser)
+                    .toList();
+        }
+        List<User> all = new ArrayList<>();
+        for (CompetitionParticipant p : participantRepo.findLeaderboard(c.getId())) {
+            all.addAll(collectUsersUnderScope(p.getGroup().getId()));
+        }
+        return all.stream().distinct().toList();
+    }
+
     private List<CompetitionDTOs.AdminRetoTeam> buildGroupTeams(
             Competition c, LocalDate start, LocalDate end, LocalDate hoy) {
         List<CompetitionDTOs.AdminRetoTeam> teams = new ArrayList<>();
