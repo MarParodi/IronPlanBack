@@ -1,6 +1,7 @@
 package com.example.ironplan.repository;
 
 import com.example.ironplan.model.FreeActivitySession;
+import com.example.ironplan.repository.projection.ActividadLibreDetalle;
 import com.example.ironplan.repository.projection.ActividadLibreScoring;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -29,6 +30,20 @@ public interface FreeActivitySessionRepository extends JpaRepository<FreeActivit
           AND s.completedAt BETWEEN :start AND :end
         """)
     List<ActividadLibreScoring> findScoringDataForUsers(
+            @Param("userIds") Collection<Long> userIds,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        SELECT new com.example.ironplan.repository.projection.ActividadLibreDetalle(
+            s.id, s.user.id, s.startedAt, s.completedAt, s.activityType,
+            s.activityTypeOther, s.durationSeconds, s.distanceKm, s.photoUrl)
+        FROM FreeActivitySession s
+        WHERE s.user.id IN :userIds
+          AND s.completedAt BETWEEN :start AND :end
+        """)
+    List<ActividadLibreDetalle> findDetalleForUsers(
             @Param("userIds") Collection<Long> userIds,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end

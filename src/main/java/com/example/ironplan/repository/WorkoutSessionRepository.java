@@ -3,6 +3,7 @@ package com.example.ironplan.repository;
 
 import com.example.ironplan.model.WorkoutSession;
 import com.example.ironplan.model.WorkoutSessionStatus;
+import com.example.ironplan.repository.projection.SesionFuerzaDetalle;
 import com.example.ironplan.repository.projection.SesionFuerzaScoring;
 import com.example.ironplan.rest.dto.RecentWorkoutDto;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -64,6 +65,20 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
           AND s.completedAt BETWEEN :start AND :end
         """)
     List<SesionFuerzaScoring> findScoringDataForUsers(
+            @Param("userIds") Collection<Long> userIds,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        SELECT new com.example.ironplan.repository.projection.SesionFuerzaDetalle(
+            s.id, s.user.id, s.startedAt, s.completedAt, s.progressPercentage, s.completedExercises)
+        FROM WorkoutSession s
+        WHERE s.user.id IN :userIds
+          AND s.status = com.example.ironplan.model.WorkoutSessionStatus.COMPLETED
+          AND s.completedAt BETWEEN :start AND :end
+        """)
+    List<SesionFuerzaDetalle> findDetalleForUsers(
             @Param("userIds") Collection<Long> userIds,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end

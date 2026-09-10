@@ -5,8 +5,11 @@ import com.example.ironplan.model.CompetitionStatus;
 import com.example.ironplan.model.CompetitionType;
 import com.example.ironplan.model.Level;
 import com.example.ironplan.rest.dto.CompetitionDTOs;
+import com.example.ironplan.rest.dto.RetoAdminActivityDTOs;
 import com.example.ironplan.service.CompetitionService;
 import com.example.ironplan.service.CompetitionPodiumService;
+import com.example.ironplan.service.RetoAdminActivityService;
+import com.example.ironplan.model.RetoActivityReviewFlag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +29,7 @@ class AdminCompetitionController {
  
     private final CompetitionService competitionService;
     private final CompetitionPodiumService podiumService;
+    private final RetoAdminActivityService retoAdminActivityService;
  
     @GetMapping
     public ResponseEntity<List<CompetitionDTOs.Response>> getAll(
@@ -100,6 +104,30 @@ class AdminCompetitionController {
     ) {
         competitionService.ensureScoresFresh(id);
         return ResponseEntity.ok(competitionService.getRetoDashboard(id, groupId));
+    }
+
+    @GetMapping("/{id}/participants/{userId}/point-history")
+    public ResponseEntity<RetoAdminActivityDTOs.PointHistory> getPointHistory(
+        @PathVariable Long id,
+        @PathVariable Long userId
+    ) {
+        return ResponseEntity.ok(retoAdminActivityService.getPointHistory(id, userId));
+    }
+
+    @GetMapping("/{id}/activity-reviews")
+    public ResponseEntity<RetoAdminActivityDTOs.ActivityReviewQueue> listActivityReviews(
+        @PathVariable Long id,
+        @RequestParam(required = false) RetoActivityReviewFlag flag
+    ) {
+        return ResponseEntity.ok(retoAdminActivityService.listReviews(id, flag));
+    }
+
+    @PutMapping("/{id}/activity-reviews")
+    public ResponseEntity<RetoAdminActivityDTOs.ActivityReviewItem> upsertActivityReview(
+        @PathVariable Long id,
+        @Valid @RequestBody RetoAdminActivityDTOs.UpsertReviewRequest request
+    ) {
+        return ResponseEntity.ok(retoAdminActivityService.upsertReview(id, request));
     }
 }
  
