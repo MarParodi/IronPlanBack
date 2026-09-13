@@ -1,6 +1,7 @@
 // src/main/java/com/example/ironplan/service/WorkoutSessionService.java
 package com.example.ironplan.service;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.model.*;
 import com.example.ironplan.repository.*;
 import com.example.ironplan.rest.dto.PreviousSessionComparison;
@@ -65,7 +66,7 @@ public class WorkoutSessionService {
 
         // 2) marcar como "saltada" usando CANCELLED
         session.setStatus(WorkoutSessionStatus.COMPLETED);
-        session.setCompletedAt(LocalDateTime.now());
+        session.setCompletedAt(AppTime.now());
         session.setProgressPercentage(0.0);
 
         return sessionRepo.save(session);
@@ -87,7 +88,7 @@ public class WorkoutSessionService {
         session.setUser(user);
         session.setRoutineDetail(detail);
         session.setStatus(WorkoutSessionStatus.ACTIVE);
-        session.setStartedAt(LocalDateTime.now());
+        session.setStartedAt(AppTime.now());
         session.setXpEarned(0);
         session.setCompletedExercises(0);
         session.setProgressPercentage(0.0);
@@ -141,7 +142,7 @@ public class WorkoutSessionService {
         session.setUser(user);
         session.setRoutineDetail(null); // custom
         session.setStatus(WorkoutSessionStatus.ACTIVE);
-        session.setStartedAt(LocalDateTime.now());
+        session.setStartedAt(AppTime.now());
         session.setXpEarned(0);
         session.setCompletedExercises(0);
         session.setProgressPercentage(0.0);
@@ -300,7 +301,7 @@ public class WorkoutSessionService {
     public void completeSession(Long sessionId, Long userId) {
         var session = getSessionForUser(sessionId, userId);
         session.setStatus(WorkoutSessionStatus.COMPLETED);
-        session.setCompletedAt(LocalDateTime.now());
+        session.setCompletedAt(AppTime.now());
         session.setProgressPercentage(100.0);
         sessionRepo.save(session);
 
@@ -335,7 +336,7 @@ public class WorkoutSessionService {
         
         // Marcar la sesión como cancelada
         session.setStatus(WorkoutSessionStatus.CANCELLED);
-        session.setCompletedAt(LocalDateTime.now());
+        session.setCompletedAt(AppTime.now());
         session.setProgressPercentage(0.0);
         session.setXpEarned(0);
         sessionRepo.save(session);
@@ -379,7 +380,7 @@ public class WorkoutSessionService {
             : 0.0;
         session.setProgressPercentage(progress);
         session.setStatus(WorkoutSessionStatus.COMPLETED);
-        session.setCompletedAt(LocalDateTime.now());
+        session.setCompletedAt(AppTime.now());
         recordUserActivity(session);
         sessionRepo.save(session);
 
@@ -551,7 +552,7 @@ public class WorkoutSessionService {
         LocalDateTime startedAt = session.getStartedAt();
         LocalDateTime completedAt = session.getCompletedAt() != null 
                 ? session.getCompletedAt() 
-                : LocalDateTime.now();
+                : AppTime.now();
         
         long durationSeconds = Duration.between(startedAt, completedAt).getSeconds();
         String durationFormatted = formatDuration(durationSeconds);
@@ -650,7 +651,7 @@ public class WorkoutSessionService {
         User user = session.getUser();
         LocalDate today = session.getCompletedAt() != null 
             ? session.getCompletedAt().toLocalDate() 
-            : LocalDate.now();
+            : AppTime.today();
 
         long durationMinutes = 0;
         if (session.getStartedAt() != null && session.getCompletedAt() != null) {

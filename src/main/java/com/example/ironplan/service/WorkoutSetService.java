@@ -1,6 +1,7 @@
 // src/main/java/com/example/ironplan/service/WorkoutSetService.java
 package com.example.ironplan.service;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.model.WorkoutExercise;
 import com.example.ironplan.model.WorkoutExerciseStatus;
 import com.example.ironplan.model.WorkoutSession;
@@ -18,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -108,7 +108,7 @@ public class WorkoutSetService {
         // Marcamos el ejercicio como iniciado si es la primera vez
         if (exercise.getStatus() == WorkoutExerciseStatus.PENDING) {
             exercise.setStatus(WorkoutExerciseStatus.IN_PROGRESS);
-            exercise.setStartedAt(LocalDateTime.now());
+            exercise.setStartedAt(AppTime.now());
         }
 
         // Traemos las series actuales
@@ -165,7 +165,7 @@ public class WorkoutSetService {
         int plannedSets = exercise.getPlannedSets() != null ? exercise.getPlannedSets() : 0;
         if (plannedSets > 0 && completedCount >= plannedSets) {
             exercise.setStatus(WorkoutExerciseStatus.COMPLETED);
-            exercise.setFinishedAt(LocalDateTime.now());
+            exercise.setFinishedAt(AppTime.now());
         }
 
         workoutExerciseRepo.save(exercise);
@@ -206,7 +206,7 @@ public class WorkoutSetService {
         boolean wasActive = session.getStatus() == WorkoutSessionStatus.ACTIVE;
         if (total > 0 && completed >= total && wasActive) {
             session.setStatus(WorkoutSessionStatus.COMPLETED);
-            session.setCompletedAt(LocalDateTime.now());
+            session.setCompletedAt(AppTime.now());
             recordUserActivity(session);
             
             // ✅ SUMAR XP AL USUARIO
@@ -243,7 +243,7 @@ public class WorkoutSetService {
         User user = session.getUser();
         LocalDate today = session.getCompletedAt() != null 
             ? session.getCompletedAt().toLocalDate() 
-            : LocalDate.now();
+            : AppTime.today();
 
         long durationMinutes = 0;
         if (session.getStartedAt() != null && session.getCompletedAt() != null) {
@@ -308,7 +308,7 @@ public class WorkoutSetService {
             activityRepository.save(UserActivity.builder()
                     .user(session.getUser())
                     .activityDate(session.getCompletedAt() != null
-                            ? session.getCompletedAt().toLocalDate() : LocalDate.now())
+                            ? session.getCompletedAt().toLocalDate() : AppTime.today())
                     .metricType(MetricType.VOLUME_TOTAL)
                     .metricValue(volume)
                     .sourceId(session.getId())

@@ -1,6 +1,7 @@
 // src/main/java/com/example/ironplan/service/WorkoutExerciseService.java
 package com.example.ironplan.service;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.model.WorkoutExercise;
 import com.example.ironplan.model.WorkoutExerciseStatus;
 import com.example.ironplan.model.WorkoutSession;
@@ -9,8 +10,6 @@ import com.example.ironplan.repository.WorkoutSessionRepository;
 import com.example.ironplan.rest.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
 
 @Service
 public class WorkoutExerciseService {
@@ -100,7 +99,7 @@ public class WorkoutExerciseService {
         if (exercise.getStatus() != WorkoutExerciseStatus.COMPLETED) {
             exercise.setStatus(WorkoutExerciseStatus.COMPLETED);
             exercise.setCompletedSets(exercise.getPlannedSets());
-            exercise.setFinishedAt(LocalDateTime.now());
+            exercise.setFinishedAt(AppTime.now());
 
             // Actualizar progreso de la sesión
             int completed = session.getCompletedExercises() + 1;
@@ -123,7 +122,7 @@ public class WorkoutExerciseService {
             // Si ya completó todos los ejercicios, marcamos la sesión como COMPLETED
             if (total > 0 && completed >= total) {
                 session.setStatus(com.example.ironplan.model.WorkoutSessionStatus.COMPLETED);
-                session.setCompletedAt(LocalDateTime.now());
+                session.setCompletedAt(AppTime.now());
             }
 
             // Persistimos cambios

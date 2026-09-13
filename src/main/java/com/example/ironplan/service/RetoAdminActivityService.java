@@ -1,5 +1,6 @@
 package com.example.ironplan.service;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.config.RetoPointsProperties;
 import com.example.ironplan.model.FreeActivityType;
 import com.example.ironplan.model.MetricType;
@@ -83,7 +84,7 @@ public class RetoAdminActivityService {
         List<OneRmDiarioUsuario> oneRm = workoutSetRepo.findDailyMaxOneRmForUsers(ids, scope.start(), scope.end());
         Map<SourceKey, RetoActivityReview> reviews = indexReviews(scope.competition().getId());
         return construirHistorial(
-                userId, fullName(user), scope.start(), scope.end(), LocalDate.now(),
+                userId, fullName(user), scope.start(), scope.end(), AppTime.today(),
                 libres, fuerzas, volumen, oneRm, reviews);
     }
 
@@ -722,7 +723,7 @@ public class RetoAdminActivityService {
 
         LocalDate dia() {
             LocalDateTime at = completedAt != null ? completedAt : startedAt;
-            return at != null ? at.toLocalDate() : LocalDate.now();
+            return at != null ? at.toLocalDate() : AppTime.today();
         }
     }
 }
