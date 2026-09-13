@@ -1,5 +1,6 @@
 package com.example.ironplan.service;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.model.*;
 import com.example.ironplan.repository.FreeActivitySessionRepository;
 import com.example.ironplan.repository.UserActivityRepository;
@@ -29,7 +30,7 @@ public class FreeActivityService {
 
     @Transactional
     public FreeActivityResponse create(User user, CreateFreeActivityRequest req) {
-        LocalDateTime completedAt = LocalDateTime.now();
+        LocalDateTime completedAt = AppTime.now();
         int duration = req.durationSeconds();
         LocalDateTime startedAt = completedAt.minusSeconds(duration);
 

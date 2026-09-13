@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.config.CacheConfig;
 import com.example.ironplan.config.LeaderboardCacheEvictor;
 
@@ -499,7 +500,7 @@ public class CompetitionService {
 
         // 2. Cerrar las que ya expiraron
         List<Competition> expired = active.stream()
-            .filter(c -> c.getEndDate() != null && c.getEndDate().isBefore(LocalDate.now()))
+            .filter(c -> c.getEndDate() != null && c.getEndDate().isBefore(AppTime.today()))
             .toList();
         expired.forEach(c -> c.finish());
         if (!expired.isEmpty()) competitionRepo.saveAll(expired);
@@ -761,16 +762,16 @@ public class CompetitionService {
     private void autoFinishIfExpired(Competition c) {
         if (c.getStatus() != CompetitionStatus.ACTIVE) return;
         if (c.getEndDate() == null) return;
-        if (!c.getEndDate().isBefore(LocalDate.now())) return;
+        if (!c.getEndDate().isBefore(AppTime.today())) return;
         recalculateScores(c);
         c.finish();
         competitionRepo.save(c);
     }
 
     private LocalDate effectiveEndDate(Competition c) {
-        if (c.getEndDate() == null) return LocalDate.now();
+        if (c.getEndDate() == null) return AppTime.today();
         if (c.getStatus() == CompetitionStatus.FINISHED) return c.getEndDate();
-        return c.getEndDate().isBefore(LocalDate.now()) ? c.getEndDate() : LocalDate.now();
+        return c.getEndDate().isBefore(AppTime.today()) ? c.getEndDate() : AppTime.today();
     }
 
     private List<CompetitionDTOs.InternalRankingEntry> buildInternalRankingEntries(
@@ -985,7 +986,7 @@ public class CompetitionService {
 
         LocalDate start = c.getStartDate();
         LocalDate end = effectiveEndDate(c);
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = AppTime.today();
 
         List<CompetitionDTOs.AdminRetoTeam> teams = isMemberCompetition(c)
                 ? List.of(buildMemberRosterTeam(c, start, end, hoy))

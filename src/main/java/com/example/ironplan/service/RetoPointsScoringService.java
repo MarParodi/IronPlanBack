@@ -1,5 +1,6 @@
 package com.example.ironplan.service;
 
+import com.example.ironplan.config.AppTime;
 import com.example.ironplan.config.RetoPointsProperties;
 import com.example.ironplan.model.MetricType;
 import com.example.ironplan.repository.FreeActivitySessionRepository;
@@ -138,7 +139,7 @@ public class RetoPointsScoringService {
 
     @Transactional(readOnly = true)
     public Analisis analizar(Collection<Long> userIds, LocalDate start, LocalDate end) {
-        return analizar(userIds, start, end, LocalDate.now());
+        return analizar(userIds, start, end, AppTime.today());
     }
 
     @Transactional(readOnly = true)
@@ -146,7 +147,7 @@ public class RetoPointsScoringService {
         if (!esRangoValido(userIds, start, end)) {
             return vacio(userIds, start, end, hoy);
         }
-        LocalDate referencia = hoy != null ? hoy : LocalDate.now();
+        LocalDate referencia = hoy != null ? hoy : AppTime.today();
         Contexto ctx = cargar(userIds, start, end, referencia);
         return ctx.analisis();
     }
@@ -157,7 +158,7 @@ public class RetoPointsScoringService {
     }
 
     private Analisis vacio(Collection<Long> userIds, LocalDate start, LocalDate end, LocalDate hoy) {
-        LocalDate ini = start != null ? start : (hoy != null ? hoy : LocalDate.now());
+        LocalDate ini = start != null ? start : (hoy != null ? hoy : AppTime.today());
         LocalDate fin = end != null && start != null && !end.isBefore(start) ? end : ini;
         Map<Long, UsuarioAnalisis> usuarios = new LinkedHashMap<>();
         if (userIds != null) {

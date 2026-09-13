@@ -1,7 +1,10 @@
 package com.example.ironplan;
 
+import com.example.ironplan.config.AppTime;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+import java.util.TimeZone;
 
 @SpringBootApplication
 @org.springframework.scheduling.annotation.EnableScheduling
@@ -9,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class IronPlanApplication {
 
     public static void main(String[] args) {
+        TimeZone.setDefault(TimeZone.getTimeZone(AppTime.ZONE));
         SpringApplication.run(IronPlanApplication.class, args);
     }
 }
