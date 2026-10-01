@@ -10,8 +10,8 @@ public class SnapshotScheduler {
 
     private final SnapshotService snapshotService;
 
-    /** Cada domingo 23:55 */
-    @Scheduled(cron = "0 55 23 * * SUN")
+    /** Lunes 00:30: recalcula todas las semanas, incluida la que acaba de cerrar. */
+    @Scheduled(cron = "0 30 0 * * MON")
     public void generarSnapshotSemanal() {
         snapshotService.procesarRetosActivos();
     }

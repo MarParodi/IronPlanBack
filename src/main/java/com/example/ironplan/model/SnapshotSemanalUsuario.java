@@ -80,6 +80,57 @@ public class SnapshotSemanalUsuario {
     @Builder.Default
     private BigDecimal kmCardio = BigDecimal.ZERO;
 
+    @Column(name = "sesiones_totales", nullable = false)
+    @Builder.Default
+    private Integer sesionesTotales = 0;
+
+    @Column(name = "sesiones_previstas", precision = 6, scale = 2)
+    private BigDecimal sesionesPrevistas;
+
+    @Column(name = "adherencia_pct", precision = 7, scale = 2)
+    private BigDecimal adherenciaPct;
+
+    @Column(name = "dias_activos", nullable = false)
+    @Builder.Default
+    private Integer diasActivos = 0;
+
+    @Column(name = "minutos_fuerza", nullable = false)
+    @Builder.Default
+    private Integer minutosFuerza = 0;
+
+    @Column(name = "carga_promedio", precision = 8, scale = 2)
+    private BigDecimal cargaPromedio;
+
+    @Column(name = "xp_acumulado_periodo", nullable = false)
+    @Builder.Default
+    private Integer xpAcumuladoPeriodo = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rango_fin_semana", length = 30)
+    private XpRank rangoFinSemana;
+
+    @Column(name = "logros_semana", nullable = false)
+    @Builder.Default
+    private Integer logrosSemana = 0;
+
+    @Column(name = "logros_acumulados", nullable = false)
+    @Builder.Default
+    private Integer logrosAcumulados = 0;
+
+    @Column(name = "puntos_reto_semana", precision = 10, scale = 2)
+    private BigDecimal puntosRetoSemana;
+
+    @Column(name = "puntos_reto_acumulados", precision = 10, scale = 2)
+    private BigDecimal puntosRetoAcumulados;
+
+    @Column(name = "semana_completa", nullable = false)
+    @Builder.Default
+    private Boolean semanaCompleta = false;
+
+    @Column(name = "activo", nullable = false)
+    @Builder.Default
+    private Boolean activo = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

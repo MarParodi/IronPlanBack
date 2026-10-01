@@ -25,6 +25,9 @@ public interface UserAchievementRepository extends JpaRepository<UserAchievement
     
     // Contar hazañas desbloqueadas por usuario
     long countByUser_Id(Long userId);
+
+    long countByUser_IdAndUnlockedAtGreaterThanEqualAndUnlockedAtLessThan(
+            Long userId, java.time.LocalDateTime start, java.time.LocalDateTime end);
     
     // Obtener los códigos de hazañas desbloqueadas por un usuario
     @Query("SELECT ua.achievement.code FROM UserAchievement ua WHERE ua.user.id = :userId")

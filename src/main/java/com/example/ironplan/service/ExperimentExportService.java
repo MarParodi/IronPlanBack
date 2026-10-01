@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.Period;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,16 +25,21 @@ public class ExperimentExportService {
     private final SusRespuestaRepository susRepo;
     private final SnapshotSemanalUsuarioRepository snapshotRepo;
     private final OrganizationalAccessService accessService;
+    private final SnapshotService snapshotService;
+    private final CompetitionParticipantRepository competitionParticipantRepo;
+    private final CompetitionMemberParticipantRepository competitionMemberRepo;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public String exportarCsvPrincipal(Long retoId, User admin, boolean incluirOutliers, boolean soloCompletos, boolean incluirInactivos) {
         ExperimentoReto reto = retoRepo.findById(retoId)
                 .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
         accessService.requireManage(reto.getOrganizacion());
+        snapshotService.actualizarSnapshotsPendientes(retoId);
 
         int semanasIntervencion = reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
         int semInicio = 1;
         int semFin = semanasIntervencion;
+        int semanasTranscurridas = snapshotService.semanasTranscurridas(reto);
 
         List<String> rows = new ArrayList<>();
         rows.add(String.join(",",
@@ -49,7 +55,10 @@ public class ExperimentExportService {
                 "delta_one_rm", "delta_volumen",
                 "total_sesiones", "frecuencia_semanal_promedio", "xp_total_acumulado", "posicion_leaderboard_fin",
                 "sus_q1", "sus_q2", "sus_q3", "sus_q4", "sus_q5", "sus_q6", "sus_q7", "sus_q8", "sus_q9", "sus_q10", "puntaje_sus",
-                "incluir_en_analisis", "tiene_pretest", "tiene_posttest", "tiene_sus"));
+                "incluir_en_analisis", "tiene_pretest", "tiene_posttest", "tiene_sus",
+                "grupo", "dias_previstos",
+                "sesiones_previstas_total", "adherencia_pct_total", "dias_activos_total", "semanas_activas", "semanas_transcurridas",
+                "xp_periodo", "rango_fin", "logros_periodo", "puntos_reto_total", "participa_en_reto"));
 
         for (ParticipanteReto pr : participanteRepo.findByRetoIdWithUsuario(retoId)) {
             if (!incluirInactivos && !Boolean.TRUE.equals(pr.getActivo())) continue;
@@ -66,16 +75,17 @@ public class ExperimentExportService {
             }
 
             User u = pr.getUsuario();
-            int edad = u.getBirthday() != null ? Period.between(u.getBirthday(), LocalDate.now()).getYears() : 0;
             String org = reto.getOrganizacion() != null ? reto.getOrganizacion().getName() : "";
 
             var sInicio = snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, u.getId(), semInicio).orElse(null);
             var sFin = snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(retoId, u.getId(), semFin).orElse(null);
-            var snaps = snapshotRepo.findByRetoIdAndUsuarioIdOrderByNumeroSemanaAsc(retoId, u.getId());
+            var snaps = snapshotRepo.findByRetoIdAndUsuarioIdOrderByNumeroSemanaAsc(retoId, u.getId()).stream()
+                    .filter(s -> s.getNumeroSemana() != null && s.getNumeroSemana() <= semanasTranscurridas)
+                    .toList();
+            SnapshotSemanalUsuario ultimo = snaps.isEmpty() ? null : snaps.get(snaps.size() - 1);
 
             int totalSesiones = snaps.stream().mapToInt(SnapshotSemanalUsuario::getSesionesCompletadas).sum();
-            double freqProm = snaps.isEmpty() ? 0 :
-                    snaps.stream().mapToInt(SnapshotSemanalUsuario::getSesionesCompletadas).average().orElse(0);
+            double freqProm = semanasTranscurridas == 0 ? 0 : (double) totalSesiones / semanasTranscurridas;
 
             BigDecimal deltaMet = null;
             if (ipaqPre != null && ipaqPost != null && ipaqPre.getMetTotalSemana() != null && ipaqPost.getMetTotalSemana() != null) {
@@ -92,8 +102,10 @@ public class ExperimentExportService {
 
             var sus = susRepo.findByParticipanteRetoId(pr.getId()).orElse(null);
 
+            Totales t = totales(snaps);
+
             rows.add(csv(
-                    pr.getId(), ParticipanteCategoria.fromUserLevel(u.getLevel()), pr.getObjetivoCodigo(), u.getGender(), edad, org,
+                    pr.getId(), ParticipanteCategoria.fromUserLevel(u.getLevel()), pr.getObjetivoCodigo(), u.getGender(), edad(u), org,
                     ipaqField(ipaqPre, "caminataDias"), ipaqField(ipaqPre, "caminataMin"),
                     ipaqField(ipaqPre, "modDias"), ipaqField(ipaqPre, "modMin"),
                     ipaqField(ipaqPre, "vigDias"), ipaqField(ipaqPre, "vigMin"),
@@ -117,10 +129,112 @@ public class ExperimentExportService {
                     susField(sus, 1), susField(sus, 2), susField(sus, 3), susField(sus, 4), susField(sus, 5),
                     susField(sus, 6), susField(sus, 7), susField(sus, 8), susField(sus, 9), susField(sus, 10),
                     sus != null ? sus.getPuntajeSus() : "",
-                    pr.getActivo(), ipaqPre != null, ipaqPost != null, sus != null));
+                    pr.getActivo(), ipaqPre != null, ipaqPost != null, sus != null,
+                    grupo(u), u.getTrainDays(),
+                    t.previstas, t.adherencia, t.diasActivos, t.semanasActivas, semanasTranscurridas,
+                    t.xpPeriodo,
+                    ultimo != null && ultimo.getRangoFinSemana() != null ? ultimo.getRangoFinSemana().name() : "",
+                    ultimo != null ? ultimo.getLogrosAcumulados() : "",
+                    ultimo != null ? ultimo.getPuntosRetoAcumulados() : "",
+                    participaEnReto(reto, u)));
         }
 
         return rows.stream().collect(Collectors.joining("\n"));
+    }
+
+    /** Una fila por participante y semana transcurrida, sin filtros de pre/post-test. */
+    @Transactional
+    public String exportarCsvSemanal(Long retoId, User admin) {
+        ExperimentoReto reto = retoRepo.findById(retoId)
+                .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
+        accessService.requireManage(reto.getOrganizacion());
+        snapshotService.actualizarSnapshotsPendientes(retoId);
+
+        int semanas = snapshotService.semanasTranscurridas(reto);
+
+        List<String> rows = new ArrayList<>();
+        rows.add(String.join(",",
+                "participante_id", "grupo", "categoria", "genero", "edad", "dias_previstos",
+                "semana", "fecha_inicio", "fecha_fin", "semana_completa",
+                "sesiones_fuerza", "sesiones_libre", "sesiones_totales", "sesiones_previstas", "adherencia_pct",
+                "dias_activos", "semana_activa",
+                "minutos_fuerza", "minutos_cardio", "km_cardio",
+                "volumen", "carga_promedio", "one_rm_promedio", "one_rm_maximo",
+                "xp_semana", "xp_acumulado_periodo", "rango", "logros_semana", "logros_acumulados",
+                "puntos_reto_semana", "puntos_reto_acumulados", "posicion_leaderboard",
+                "activo"));
+
+        for (ParticipanteReto pr : participanteRepo.findByRetoIdWithUsuario(retoId)) {
+            User u = pr.getUsuario();
+            Map<Integer, SnapshotSemanalUsuario> porSemana = snapshotRepo
+                    .findByRetoIdAndUsuarioIdOrderByNumeroSemanaAsc(retoId, u.getId()).stream()
+                    .collect(Collectors.toMap(SnapshotSemanalUsuario::getNumeroSemana, s -> s, (a, b) -> a));
+
+            for (int w = 1; w <= semanas; w++) {
+                SnapshotSemanalUsuario s = porSemana.get(w);
+                if (s == null) continue;
+                rows.add(csv(
+                        pr.getId(), grupo(u), ParticipanteCategoria.fromUserLevel(u.getLevel()), u.getGender(),
+                        edad(u), u.getTrainDays(),
+                        w, s.getFechaInicioSemana(), s.getFechaFinSemana(), s.getSemanaCompleta(),
+                        s.getSesionesCompletadas(), s.getSesionesCardio(), s.getSesionesTotales(),
+                        s.getSesionesPrevistas(), s.getAdherenciaPct(),
+                        s.getDiasActivos(), s.getDiasActivos() != null && s.getDiasActivos() > 0,
+                        s.getMinutosFuerza(), s.getMinutosCardio(), s.getKmCardio(),
+                        s.getVolumenTotalSemana(), s.getCargaPromedio(), s.getOneRmPromedio(), s.getOneRmMaximo(),
+                        s.getXpGanadoSemana(), s.getXpAcumuladoPeriodo(),
+                        s.getRangoFinSemana() != null ? s.getRangoFinSemana().name() : "",
+                        s.getLogrosSemana(), s.getLogrosAcumulados(),
+                        s.getPuntosRetoSemana(), s.getPuntosRetoAcumulados(), s.getPosicionLeaderboard(),
+                        s.getActivo()));
+            }
+        }
+
+        return rows.stream().collect(Collectors.joining("\n"));
+    }
+
+    private record Totales(BigDecimal previstas, BigDecimal adherencia, int diasActivos, int semanasActivas, int xpPeriodo) {}
+
+    private Totales totales(List<SnapshotSemanalUsuario> snaps) {
+        BigDecimal previstas = null;
+        int sesionesTotales = 0;
+        int diasActivos = 0;
+        int semanasActivas = 0;
+        int xpPeriodo = 0;
+        for (SnapshotSemanalUsuario s : snaps) {
+            if (s.getSesionesPrevistas() != null) {
+                previstas = (previstas == null ? BigDecimal.ZERO : previstas).add(s.getSesionesPrevistas());
+            }
+            sesionesTotales += s.getSesionesTotales() != null ? s.getSesionesTotales() : 0;
+            int dias = s.getDiasActivos() != null ? s.getDiasActivos() : 0;
+            diasActivos += dias;
+            if (dias > 0) semanasActivas++;
+            xpPeriodo += s.getXpGanadoSemana() != null ? s.getXpGanadoSemana() : 0;
+        }
+        BigDecimal adherencia = previstas == null || previstas.signum() == 0 ? null :
+                BigDecimal.valueOf(sesionesTotales * 100.0).divide(previstas, 2, RoundingMode.HALF_UP);
+        return new Totales(previstas, adherencia, diasActivos, semanasActivas, xpPeriodo);
+    }
+
+    private boolean participaEnReto(ExperimentoReto reto, User u) {
+        Competition c = reto.getCompetition();
+        if (c == null) return false;
+        if (competitionMemberRepo.existsByCompetitionIdAndUserId(c.getId(), u.getId())) return true;
+        OrganizationalGroup g = u.getPrimaryOrganizationalGroup();
+        int guard = 10;
+        while (g != null && guard-- > 0) {
+            if (competitionParticipantRepo.existsByCompetitionIdAndGroupId(c.getId(), g.getId())) return true;
+            g = g.getParent();
+        }
+        return false;
+    }
+
+    private static String grupo(User u) {
+        return u.getPrimaryOrganizationalGroup() != null ? u.getPrimaryOrganizationalGroup().getName() : "";
+    }
+
+    private static Object edad(User u) {
+        return u.getBirthday() != null ? Period.between(u.getBirthday(), LocalDate.now()).getYears() : "";
     }
 
     private Object ipaqField(IpaqRespuesta r, String field) {

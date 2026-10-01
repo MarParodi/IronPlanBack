@@ -134,4 +134,16 @@ public class AdminRetoController {
                 .contentType(MediaType.parseMediaType("text/csv"))
                 .body(csv);
     }
+
+    @GetMapping("/{retoId}/exportar/csv-semanal")
+    public ResponseEntity<String> exportarCsvSemanal(
+            @PathVariable Long retoId,
+            @AuthenticationPrincipal User user) {
+        String csv = exportService.exportarCsvSemanal(retoId, user);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"ironplan_semanal_reto_" + retoId + ".csv\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv);
+    }
 }
