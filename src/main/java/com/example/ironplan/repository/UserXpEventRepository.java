@@ -11,4 +11,6 @@ public interface UserXpEventRepository extends JpaRepository<UserXpEvent, Long> 
     long countByUser_Id(Long userId);
 
     List<UserXpEvent> findByUser_IdAndCreatedAtBetween(Long userId, LocalDateTime start, LocalDateTime end);
+
+    List<UserXpEvent> findByUser_IdAndCreatedAtGreaterThanEqual(Long userId, LocalDateTime start);
 }

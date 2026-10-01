@@ -11,11 +11,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +35,11 @@ public class SnapshotService {
     private final FreeActivitySessionRepository freeActivityRepo;
     private final CompetitionMemberParticipantRepository memberParticipantRepo;
     private final UserXpEventRepository xpEventRepo;
+    private final UserAchievementRepository achievementRepo;
+    private final RetoPointsScoringService retoPointsScoringService;
+
+    /** Qué semanas se recalculan: todas, o solo las faltantes y las que no estaban completas. */
+    enum Modo { TODAS, PENDIENTES }
 
     @Transactional(readOnly = true)
     public List<SnapshotSemanalUsuario> listSnapshots(Long retoId, Long usuarioId) {
@@ -40,14 +50,14 @@ public class SnapshotService {
     public void procesarRetosActivos() {
         for (ExperimentoReto reto : retoRepo.findByEstado(ExperimentoRetoEstado.ACTIVO)) {
             try {
-                generarSnapshotSemanaActual(reto.getId(), null);
+                generarSemanas(reto, 1, semanasTranscurridas(reto), Modo.TODAS);
             } catch (Exception e) {
                 log.error("Error generando snapshot para reto {}", reto.getId(), e);
             }
         }
     }
 
-    /** Genera la semana en curso (job automático / compatibilidad). */
+    /** Recalcula la semana en curso (compatibilidad). */
     @Transactional
     public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotSemanaActual(Long retoId, User admin) {
         ExperimentoReto reto = findRetoOrThrow(retoId);
@@ -55,105 +65,176 @@ public class SnapshotService {
         if (semana < 1 || semana > semanasIntervencion(reto)) {
             return new ExperimentoDTOs.SnapshotGenerarResponse(Math.max(semana, 0), 0);
         }
-        int procesados = generarSnapshotSemanaSiFalta(reto, semana);
-        return new ExperimentoDTOs.SnapshotGenerarResponse(semana, procesados);
+        return generarSemanas(reto, semana, semana, Modo.TODAS);
     }
 
-    /** Admin: genera snapshots faltantes hasta la semana actual o todas si el reto ya terminó. */
+    /** Admin: recalcula todas las semanas hasta la actual, o todas si el reto ya terminó. */
     @Transactional
     public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotsFaltantes(Long retoId, User admin) {
         ExperimentoReto reto = findRetoOrThrow(retoId);
-        int hasta = calcularSemanaHasta(reto);
-        return generarSemanas(reto, 1, hasta);
+        return generarSemanas(reto, 1, semanasTranscurridas(reto), Modo.TODAS);
     }
 
-    /** Al cerrar el reto: genera retroactivamente todas las semanas de intervención. */
+    /** Antes de exportar: genera las semanas faltantes y recalcula las que no estaban completas. */
+    @Transactional
+    public ExperimentoDTOs.SnapshotGenerarResponse actualizarSnapshotsPendientes(Long retoId) {
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        return generarSemanas(reto, 1, semanasTranscurridas(reto), Modo.PENDIENTES);
+    }
+
+    /** Al cerrar el reto: recalcula todas las semanas de intervención. */
     @Transactional
     public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotsRetroactivos(Long retoId, User admin) {
         ExperimentoReto reto = findRetoOrThrow(retoId);
-        return generarSemanas(reto, 1, semanasIntervencion(reto));
+        return generarSemanas(reto, 1, semanasIntervencion(reto), Modo.TODAS);
     }
 
-    private ExperimentoDTOs.SnapshotGenerarResponse generarSemanas(ExperimentoReto reto, int desde, int hasta) {
-        if (hasta < desde) {
-            return new ExperimentoDTOs.SnapshotGenerarResponse(0, 0);
-        }
-        int procesados = 0;
-        int ultimaSemana = 0;
-        for (int w = desde; w <= hasta; w++) {
-            int c = generarSnapshotSemanaSiFalta(reto, w);
-            if (c > 0) {
-                procesados += c;
-                ultimaSemana = w;
-            }
-        }
-        if (ultimaSemana == 0) {
-            ultimaSemana = hasta;
-        }
-        return new ExperimentoDTOs.SnapshotGenerarResponse(ultimaSemana, procesados);
-    }
-
-    private int calcularSemanaHasta(ExperimentoReto reto) {
+    /** Semanas de intervención ya iniciadas (todas si el reto terminó o está cerrado). */
+    public int semanasTranscurridas(ExperimentoReto reto) {
         int semanas = semanasIntervencion(reto);
         LocalDate hoy = LocalDate.now();
-
-        if (reto.getEstado() == ExperimentoRetoEstado.CERRADO || !hoy.isBefore(reto.getFechaFin().plusDays(1))) {
+        if (reto.getEstado() == ExperimentoRetoEstado.CERRADO || hoy.isAfter(reto.getFechaFin())) {
             return semanas;
         }
         if (hoy.isBefore(reto.getFechaInicio())) {
             return 0;
         }
-        int actual = calcularNumeroSemana(reto.getFechaInicio(), hoy);
-        return Math.min(actual, semanas);
+        return Math.min(calcularNumeroSemana(reto.getFechaInicio(), hoy), semanas);
     }
 
-    private int generarSnapshotSemanaSiFalta(ExperimentoReto reto, int numeroSemana) {
+    private ExperimentoDTOs.SnapshotGenerarResponse generarSemanas(
+            ExperimentoReto reto, int desde, int hasta, Modo modo) {
+        if (hasta < desde) {
+            return new ExperimentoDTOs.SnapshotGenerarResponse(0, 0);
+        }
+        List<ParticipanteReto> participantes = participanteRepo.findByRetoIdWithUsuario(reto.getId());
+        int procesados = 0;
+        for (int w = desde; w <= hasta; w++) {
+            procesados += generarSemana(reto, participantes, w, modo);
+        }
+        return new ExperimentoDTOs.SnapshotGenerarResponse(hasta, procesados);
+    }
+
+    private int generarSemana(ExperimentoReto reto, List<ParticipanteReto> participantes, int numeroSemana, Modo modo) {
         LocalDate inicioSemana = reto.getFechaInicio().plusWeeks(numeroSemana - 1);
         LocalDate finSemana = inicioSemana.plusDays(6);
         if (finSemana.isAfter(reto.getFechaFin())) {
             finSemana = reto.getFechaFin();
         }
+        LocalDate hoy = LocalDate.now();
 
-        int procesados = 0;
-        for (ParticipanteReto p : participanteRepo.findByRetoIdAndActivoTrue(reto.getId())) {
-            if (snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(
-                    reto.getId(), p.getUsuario().getId(), numeroSemana).isPresent()) {
+        Map<Long, SnapshotSemanalUsuario> existentes = new LinkedHashMap<>();
+        List<ParticipanteReto> aProcesar = new java.util.ArrayList<>();
+        for (ParticipanteReto p : participantes) {
+            Long userId = p.getUsuario().getId();
+            Optional<SnapshotSemanalUsuario> previo =
+                    snapshotRepo.findByRetoIdAndUsuarioIdAndNumeroSemana(reto.getId(), userId, numeroSemana);
+            if (modo == Modo.PENDIENTES && previo.isPresent()
+                    && Boolean.TRUE.equals(previo.get().getSemanaCompleta())) {
                 continue;
             }
-            snapshotRepo.save(buildSnapshot(reto, p, numeroSemana, inicioSemana, finSemana));
-            procesados++;
+            previo.ifPresent(s -> existentes.put(userId, s));
+            aProcesar.add(p);
         }
-        return procesados;
+        if (aProcesar.isEmpty()) return 0;
+
+        List<Long> userIds = aProcesar.stream().map(p -> p.getUsuario().getId()).toList();
+        Map<Long, Double> puntosAcum = puntosReto(reto, userIds, finSemana);
+        Map<Long, Double> puntosPrev = puntosReto(reto, userIds, inicioSemana.minusDays(1));
+
+        for (ParticipanteReto p : aProcesar) {
+            Long userId = p.getUsuario().getId();
+            DatosSemana datos = cargarDatos(reto, p, inicioSemana, finSemana, puntosAcum, puntosPrev);
+            SnapshotSemanalUsuario nuevo = construirSnapshot(reto, p, numeroSemana, inicioSemana, finSemana, hoy, datos);
+            SnapshotSemanalUsuario previo = existentes.get(userId);
+            if (previo != null) {
+                nuevo.setId(previo.getId());
+                nuevo.setCreatedAt(previo.getCreatedAt());
+            }
+            snapshotRepo.save(nuevo);
+        }
+        return aProcesar.size();
     }
 
-    private ExperimentoReto findRetoOrThrow(Long retoId) {
-        return retoRepo.findById(retoId)
-                .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
+    /** Puntos TEAM_POINTS acumulados de cada usuario hasta {@code hasta}; null si el reto no tiene esa competencia. */
+    private Map<Long, Double> puntosReto(ExperimentoReto reto, List<Long> userIds, LocalDate hasta) {
+        Competition c = reto.getCompetition();
+        if (c == null || c.getMetricType() != MetricType.TEAM_POINTS) return null;
+        LocalDate inicio = c.getStartDate();
+        LocalDate fin = hasta;
+        if (c.getEndDate() != null && c.getEndDate().isBefore(fin)) fin = c.getEndDate();
+        if (inicio == null || fin.isBefore(inicio)) {
+            Map<Long, Double> ceros = new LinkedHashMap<>();
+            for (Long id : userIds) ceros.put(id, 0.0);
+            return ceros;
+        }
+        return retoPointsScoringService.scoreUsers(userIds, inicio, fin);
     }
 
-    private static int semanasIntervencion(ExperimentoReto reto) {
-        return reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
+    record DatosSemana(
+            List<WorkoutSet> sets,
+            List<FreeActivitySession> libres,
+            List<UserXpEvent> xpSemana,
+            List<UserXpEvent> xpPeriodo,
+            List<UserXpEvent> xpPosterior,
+            long logrosSemana,
+            long logrosAcumulados,
+            Double puntosAcumulados,
+            Double puntosPrevios,
+            Integer posicionLeaderboard
+    ) {}
+
+    private DatosSemana cargarDatos(
+            ExperimentoReto reto,
+            ParticipanteReto participante,
+            LocalDate inicioSemana,
+            LocalDate finSemana,
+            Map<Long, Double> puntosAcum,
+            Map<Long, Double> puntosPrev
+    ) {
+        Long userId = participante.getUsuario().getId();
+        LocalDateTime start = inicioSemana.atStartOfDay();
+        LocalDateTime end = finSemana.plusDays(1).atStartOfDay();
+        LocalDateTime inicioReto = reto.getFechaInicio().atStartOfDay();
+
+        return new DatosSemana(
+                progressRepo.findCompletedSetsInDateRange(userId, start, end),
+                freeActivityRepo.findByUser_IdAndCompletedAtBetweenOrderByCompletedAtDesc(userId, start, end),
+                xpEventRepo.findByUser_IdAndCreatedAtBetween(userId, start, end),
+                xpEventRepo.findByUser_IdAndCreatedAtBetween(userId, inicioReto, end),
+                xpEventRepo.findByUser_IdAndCreatedAtGreaterThanEqual(userId, end),
+                achievementRepo.countByUser_IdAndUnlockedAtGreaterThanEqualAndUnlockedAtLessThan(userId, start, end),
+                achievementRepo.countByUser_IdAndUnlockedAtGreaterThanEqualAndUnlockedAtLessThan(userId, inicioReto, end),
+                puntosAcum != null ? puntosAcum.get(userId) : null,
+                puntosPrev != null ? puntosPrev.get(userId) : null,
+                obtenerPosicionLeaderboard(reto, userId)
+        );
     }
 
-    private SnapshotSemanalUsuario buildSnapshot(
+    SnapshotSemanalUsuario construirSnapshot(
             ExperimentoReto reto,
             ParticipanteReto participante,
             int numeroSemana,
             LocalDate inicioSemana,
-            LocalDate finSemana
+            LocalDate finSemana,
+            LocalDate hoy,
+            DatosSemana d
     ) {
         User user = participante.getUsuario();
-        LocalDateTime start = inicioSemana.atStartOfDay();
-        LocalDateTime end = finSemana.plusDays(1).atStartOfDay();
 
-        List<WorkoutSet> sets = progressRepo.findCompletedSetsInDateRange(user.getId(), start, end);
+        Map<Long, WorkoutSession> sesionesFuerza = new LinkedHashMap<>();
+        for (WorkoutSet s : d.sets()) {
+            WorkoutSession ws = s.getWorkoutExercise().getWorkoutSession();
+            sesionesFuerza.putIfAbsent(ws.getId(), ws);
+        }
+        int sesiones = sesionesFuerza.size();
 
-        int sesiones = (int) sets.stream()
-                .map(s -> s.getWorkoutExercise().getWorkoutSession().getId())
-                .distinct()
-                .count();
+        int minutosFuerza = (int) sesionesFuerza.values().stream()
+                .filter(ws -> ws.getStartedAt() != null && ws.getCompletedAt() != null)
+                .mapToLong(ws -> Math.max(0, Duration.between(ws.getStartedAt(), ws.getCompletedAt()).toMinutes()))
+                .sum();
 
-        BigDecimal volumen = sets.stream()
+        BigDecimal volumen = d.sets().stream()
                 .map(s -> s.getVolumenSerie() != null
                         ? s.getVolumenSerie()
                         : BigDecimal.valueOf(
@@ -162,22 +243,61 @@ public class SnapshotService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        List<BigDecimal> oneRms = sets.stream()
+        List<BigDecimal> oneRms = d.sets().stream()
                 .map(WorkoutSet::getOneRmEstimado)
                 .filter(v -> v != null)
                 .toList();
-
         BigDecimal oneRmProm = oneRms.isEmpty() ? null :
                 oneRms.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
                         .divide(BigDecimal.valueOf(oneRms.size()), 2, RoundingMode.HALF_UP);
         BigDecimal oneRmMax = oneRms.stream().max(BigDecimal::compareTo).orElse(null);
 
-        int xpAlFin = user.getLifetimeXp() != null ? user.getLifetimeXp() : 0;
-        int xpSemana = sumXpEnSemana(user.getId(), start, end);
+        List<Double> cargas = d.sets().stream()
+                .map(WorkoutSet::getWeightKg)
+                .filter(w -> w != null && w > 0)
+                .toList();
+        BigDecimal cargaPromedio = cargas.isEmpty() ? null :
+                BigDecimal.valueOf(cargas.stream().mapToDouble(Double::doubleValue).average().orElse(0))
+                        .setScale(2, RoundingMode.HALF_UP);
 
-        Integer posicion = obtenerPosicionLeaderboard(reto, user.getId());
+        int sesionesLibre = d.libres().size();
+        int segundosLibre = d.libres().stream()
+                .mapToInt(s -> s.getDurationSeconds() != null ? s.getDurationSeconds() : 0)
+                .sum();
+        BigDecimal km = d.libres().stream()
+                .map(s -> s.getDistanceKm() != null ? BigDecimal.valueOf(s.getDistanceKm()) : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
-        var cardio = calcularCardio(user.getId(), start, end);
+        Set<LocalDate> dias = new HashSet<>();
+        sesionesFuerza.values().stream()
+                .map(ws -> ws.getCompletedAt() != null ? ws.getCompletedAt() : ws.getStartedAt())
+                .filter(t -> t != null)
+                .forEach(t -> dias.add(t.toLocalDate()));
+        d.libres().stream()
+                .map(FreeActivitySession::getCompletedAt)
+                .filter(t -> t != null)
+                .forEach(t -> dias.add(t.toLocalDate()));
+
+        int sesionesTotales = sesiones + sesionesLibre;
+        BigDecimal previstas = sesionesPrevistas(user.getTrainDays(), inicioSemana, finSemana);
+        BigDecimal adherencia = previstas == null || previstas.signum() == 0 ? null :
+                BigDecimal.valueOf(sesionesTotales * 100.0)
+                        .divide(previstas, 2, RoundingMode.HALF_UP);
+
+        int xpSemana = sumaPositiva(d.xpSemana());
+        int xpPeriodo = sumaPositiva(d.xpPeriodo());
+        int xpPosterior = d.xpPosterior().stream()
+                .mapToInt(e -> e.getXpDelta() != null ? e.getXpDelta() : 0)
+                .sum();
+        int lifetimeActual = user.getLifetimeXp() != null ? user.getLifetimeXp() : 0;
+        int lifetimeAlFin = Math.max(0, lifetimeActual - xpPosterior);
+
+        BigDecimal puntosAcum = d.puntosAcumulados() == null ? null :
+                BigDecimal.valueOf(d.puntosAcumulados()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal puntosSemana = d.puntosAcumulados() == null ? null :
+                BigDecimal.valueOf(d.puntosAcumulados() - (d.puntosPrevios() != null ? d.puntosPrevios() : 0))
+                        .setScale(2, RoundingMode.HALF_UP);
 
         return SnapshotSemanalUsuario.builder()
                 .reto(reto)
@@ -189,34 +309,50 @@ public class SnapshotService {
                 .volumenTotalSemana(volumen)
                 .oneRmPromedio(oneRmProm)
                 .oneRmMaximo(oneRmMax)
-                .xpAcumuladoAlFin(xpAlFin)
+                .xpAcumuladoAlFin(lifetimeAlFin)
                 .xpGanadoSemana(xpSemana)
-                .posicionLeaderboard(posicion)
-                .sesionesCardio(cardio.sesiones)
-                .minutosCardio(cardio.minutos)
-                .kmCardio(cardio.km)
+                .posicionLeaderboard(d.posicionLeaderboard())
+                .sesionesCardio(sesionesLibre)
+                .minutosCardio(segundosLibre / 60)
+                .kmCardio(km)
+                .sesionesTotales(sesionesTotales)
+                .sesionesPrevistas(previstas)
+                .adherenciaPct(adherencia)
+                .diasActivos(dias.size())
+                .minutosFuerza(minutosFuerza)
+                .cargaPromedio(cargaPromedio)
+                .xpAcumuladoPeriodo(xpPeriodo)
+                .rangoFinSemana(XpRank.fromLifetimeXp(lifetimeAlFin))
+                .logrosSemana((int) d.logrosSemana())
+                .logrosAcumulados((int) d.logrosAcumulados())
+                .puntosRetoSemana(puntosSemana)
+                .puntosRetoAcumulados(puntosAcum)
+                .semanaCompleta(finSemana.isBefore(hoy))
+                .activo(!Boolean.FALSE.equals(participante.getActivo()))
                 .build();
     }
 
-    private record CardioAgg(int sesiones, int minutos, BigDecimal km) {}
-
-    private CardioAgg calcularCardio(Long userId, LocalDateTime start, LocalDateTime end) {
-        var sessions = freeActivityRepo.findByUser_IdAndCompletedAtBetweenOrderByCompletedAtDesc(userId, start, end);
-        int count = sessions.size();
-        int secs = sessions.stream()
-                .mapToInt(s -> s.getDurationSeconds() != null ? s.getDurationSeconds() : 0)
-                .sum();
-        BigDecimal km = sessions.stream()
-                .map(s -> s.getDistanceKm() != null ? BigDecimal.valueOf(s.getDistanceKm()) : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new CardioAgg(count, secs / 60, km.setScale(2, RoundingMode.HALF_UP));
+    /** Días previstos por semana, prorrateados si la semana está recortada por la fecha de fin. */
+    static BigDecimal sesionesPrevistas(Integer trainDays, LocalDate inicio, LocalDate fin) {
+        if (trainDays == null || trainDays <= 0) return null;
+        long dias = ChronoUnit.DAYS.between(inicio, fin) + 1;
+        return BigDecimal.valueOf(trainDays * dias / 7.0).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private int sumXpEnSemana(Long userId, LocalDateTime start, LocalDateTime end) {
-        return xpEventRepo.findByUser_IdAndCreatedAtBetween(userId, start, end).stream()
+    private static int sumaPositiva(List<UserXpEvent> eventos) {
+        return eventos.stream()
                 .filter(e -> e.getXpDelta() != null && e.getXpDelta() > 0)
                 .mapToInt(UserXpEvent::getXpDelta)
                 .sum();
+    }
+
+    private ExperimentoReto findRetoOrThrow(Long retoId) {
+        return retoRepo.findById(retoId)
+                .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
+    }
+
+    private static int semanasIntervencion(ExperimentoReto reto) {
+        return reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
     }
 
     private Integer obtenerPosicionLeaderboard(ExperimentoReto reto, Long userId) {
@@ -234,12 +370,21 @@ public class SnapshotService {
 
     @Transactional
     public void aplicarMortalidadExperimental() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate limite = LocalDate.now().minusWeeks(2);
         for (ExperimentoReto reto : retoRepo.findByEstado(ExperimentoRetoEstado.ACTIVO)) {
-            LocalDate limite = hoy.minusWeeks(2);
             for (ParticipanteReto p : participanteRepo.findByRetoIdAndActivoTrue(reto.getId())) {
-                Optional<LocalDate> ultima = progressRepo.findWorkoutDates(p.getUsuario().getId()).stream().findFirst();
-                if (ultima.isEmpty() || ultima.get().isBefore(limite)) {
+                Long userId = p.getUsuario().getId();
+                Optional<LocalDate> ultimaFuerza = progressRepo.findWorkoutDates(userId).stream().findFirst();
+                Optional<LocalDate> ultimaLibre = freeActivityRepo.findByUser_IdOrderByCompletedAtDesc(userId).stream()
+                        .map(FreeActivitySession::getCompletedAt)
+                        .filter(t -> t != null)
+                        .map(LocalDateTime::toLocalDate)
+                        .findFirst();
+                LocalDate ultima = ultimaFuerza.orElse(null);
+                if (ultimaLibre.isPresent() && (ultima == null || ultimaLibre.get().isAfter(ultima))) {
+                    ultima = ultimaLibre.get();
+                }
+                if (ultima == null || ultima.isBefore(limite)) {
                     p.setActivo(false);
                     participanteRepo.save(p);
                     log.info("Mortalidad experimental: participante {} desactivado en reto {}", p.getId(), reto.getId());
