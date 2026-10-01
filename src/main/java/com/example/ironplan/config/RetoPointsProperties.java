@@ -138,6 +138,7 @@ public class RetoPointsProperties {
         map.put(FreeActivityType.NATACION, 1.4);
         map.put(FreeActivityType.FUTBOL, 1.4);
         map.put(FreeActivityType.BOX, 1.4);
+        map.put(FreeActivityType.CARDIO_HIT, 1.4);
         return map;
     }
 

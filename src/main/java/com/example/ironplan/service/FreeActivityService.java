@@ -104,6 +104,7 @@ public class FreeActivityService {
         double factor = switch (type) {
             case RUNNING -> 10.0;
             case BOX -> 10.0;
+            case CARDIO_HIT -> 10.0;
             case FUTBOL -> 9.0;
             case NATACION -> 9.0;
             case BICICLETA_ESTATICA -> 7.0;
