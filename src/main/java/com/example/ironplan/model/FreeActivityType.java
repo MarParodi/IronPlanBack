@@ -12,5 +12,6 @@ public enum FreeActivityType {
     FUTBOL,
     BOX,
     CLASE_GRUPAL,
+    CARDIO_HIT,
     OTRA
 }

@@ -655,6 +655,7 @@ public class RetoAdminActivityService {
             case FUTBOL -> "Fútbol";
             case BOX -> "Box";
             case CLASE_GRUPAL -> "Clase grupal";
+            case CARDIO_HIT -> "Cardio Hit";
             case OTRA -> (other != null && !other.isBlank()) ? other.trim() : "Otra";
         };
     }
