@@ -156,13 +156,16 @@ public class SnapshotService {
         return aProcesar.size();
     }
 
-    /** Puntos TEAM_POINTS acumulados de cada usuario hasta {@code hasta}; null si el reto no tiene esa competencia. */
+    /**
+     * Puntos TEAM_POINTS acumulados de cada usuario desde el inicio del reto hasta {@code hasta};
+     * null si el reto no tiene esa competencia. Se usan las fechas del reto, no las de la competencia.
+     */
     private Map<Long, Double> puntosReto(ExperimentoReto reto, List<Long> userIds, LocalDate hasta) {
         Competition c = reto.getCompetition();
         if (c == null || c.getMetricType() != MetricType.TEAM_POINTS) return null;
-        LocalDate inicio = c.getStartDate();
+        LocalDate inicio = reto.getFechaInicio();
         LocalDate fin = hasta;
-        if (c.getEndDate() != null && c.getEndDate().isBefore(fin)) fin = c.getEndDate();
+        if (reto.getFechaFin() != null && reto.getFechaFin().isBefore(fin)) fin = reto.getFechaFin();
         if (inicio == null || fin.isBefore(inicio)) {
             Map<Long, Double> ceros = new LinkedHashMap<>();
             for (Long id : userIds) ceros.put(id, 0.0);
