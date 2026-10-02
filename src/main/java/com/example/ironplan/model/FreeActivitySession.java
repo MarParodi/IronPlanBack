@@ -2,6 +2,8 @@ package com.example.ironplan.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -23,6 +25,7 @@ public class FreeActivitySession {
     private User user;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "activity_type", nullable = false, length = 40)
     private FreeActivityType activityType;
 
