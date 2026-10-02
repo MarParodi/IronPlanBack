@@ -29,6 +29,7 @@ class SnapshotServiceTest {
     private FreeActivitySessionRepository freeActivityRepo;
     private UserXpEventRepository xpEventRepo;
     private UserAchievementRepository achievementRepo;
+    private RetoPointsScoringService scoringService;
     private SnapshotService service;
 
     @BeforeEach
@@ -40,10 +41,33 @@ class SnapshotServiceTest {
         freeActivityRepo = mock(FreeActivitySessionRepository.class);
         xpEventRepo = mock(UserXpEventRepository.class);
         achievementRepo = mock(UserAchievementRepository.class);
+        scoringService = mock(RetoPointsScoringService.class);
         service = new SnapshotService(
                 retoRepo, participanteRepo, snapshotRepo, progressRepo, freeActivityRepo,
                 mock(CompetitionMemberParticipantRepository.class), xpEventRepo, achievementRepo,
-                mock(RetoPointsScoringService.class));
+                scoringService);
+    }
+
+    @Test
+    @DisplayName("Los puntos del reto se calculan con las fechas del reto aunque la competencia tenga otras")
+    void puntosConFechasDelReto() {
+        ExperimentoReto reto = retoEnCurso();
+        reto.setCompetition(Competition.builder()
+                .id(4L).metricType(MetricType.TEAM_POINTS)
+                .startDate(reto.getFechaInicio().plusMonths(3)).build());
+        User user = usuario(3, 0);
+        SnapshotSemanalUsuario previo = SnapshotSemanalUsuario.builder()
+                .id(77L).numeroSemana(1).semanaCompleta(false).build();
+        prepararMocks(reto, participante(user), previo);
+        when(scoringService.scoreUsers(any(), eq(reto.getFechaInicio()), eq(reto.getFechaInicio().plusDays(6))))
+                .thenReturn(java.util.Map.of(user.getId(), 41.0));
+
+        service.actualizarSnapshotsPendientes(reto.getId());
+
+        ArgumentCaptor<SnapshotSemanalUsuario> captor = ArgumentCaptor.forClass(SnapshotSemanalUsuario.class);
+        verify(snapshotRepo).save(captor.capture());
+        assertEquals(new BigDecimal("41.00"), captor.getValue().getPuntosRetoAcumulados());
+        assertEquals(new BigDecimal("41.00"), captor.getValue().getPuntosRetoSemana());
     }
 
     @Test
