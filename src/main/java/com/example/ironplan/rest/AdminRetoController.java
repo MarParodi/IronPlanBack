@@ -45,6 +45,13 @@ public class AdminRetoController {
         return ResponseEntity.ok(experimentoService.vincularCompetition(retoId, user, req));
     }
 
+    @PostMapping("/{retoId}/sincronizar-fechas")
+    public ResponseEntity<ExperimentoDTOs.RetoResumenResponse> sincronizarFechas(
+            @PathVariable Long retoId,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(experimentoService.sincronizarFechasConCompetencia(retoId, user));
+    }
+
     @GetMapping("/competencias-candidatas")
     public ResponseEntity<List<com.example.ironplan.rest.dto.CompetitionDTOs.Response>> competenciasPorOrg(
             @RequestParam Long organizacionId,

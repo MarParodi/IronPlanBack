@@ -9,6 +9,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 
@@ -105,8 +107,43 @@ public class ExperimentoRetoService {
             reto.setCompetition(null);
         } else {
             reto.setCompetition(resolveLinkableCompetition(req.competitionId(), reto.getOrganizacion(), admin));
+            aplicarFechasDeCompetencia(reto);
         }
         return toResumen(retoRepo.save(reto));
+    }
+
+    /** Copia al reto las fechas de su competencia vinculada y recalcula los snapshots con las semanas nuevas. */
+    @Transactional
+    public ExperimentoDTOs.RetoResumenResponse sincronizarFechasConCompetencia(Long retoId, User admin) {
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        accessService.requireManage(reto.getOrganizacion());
+        if (reto.getCompetition() == null) {
+            throw new IllegalStateException("El reto no tiene una competencia vinculada");
+        }
+        aplicarFechasDeCompetencia(reto);
+        ExperimentoDTOs.RetoResumenResponse resumen = toResumen(retoRepo.save(reto));
+        if (reto.getEstado() != ExperimentoRetoEstado.PLANEACION) {
+            snapshotService.generarSnapshotsFaltantes(retoId, admin);
+        }
+        return resumen;
+    }
+
+    private void aplicarFechasDeCompetencia(ExperimentoReto reto) {
+        Competition c = reto.getCompetition();
+        if (c == null || c.getStartDate() == null) return;
+        int semanas = reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
+        LocalDate inicio = c.getStartDate();
+        LocalDate fin = c.getEndDate() != null ? c.getEndDate() : inicio.plusWeeks(semanas).minusDays(1);
+        if (fin.isBefore(inicio)) {
+            throw new IllegalArgumentException("La competencia tiene una fecha de fin anterior al inicio");
+        }
+        if (inicio.equals(reto.getFechaInicio()) && fin.equals(reto.getFechaFin())) return;
+
+        reto.setFechaInicio(inicio);
+        reto.setFechaFin(fin);
+        reto.setSemanasIntervencion((int) ((ChronoUnit.DAYS.between(inicio, fin) + 7) / 7));
+        snapshotRepo.deleteAll(snapshotRepo.findByRetoId(reto.getId()));
+        snapshotRepo.flush();
     }
 
     private Competition resolveLinkableCompetition(Long competitionId, OrganizationalGroup org, User admin) {
