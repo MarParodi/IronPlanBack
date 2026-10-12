@@ -41,6 +41,7 @@ public class CompetitionService {
     private final NotificationService                    notificationService;
     private final LeaderboardCacheEvictor                leaderboardCacheEvictor;
     private final RetoPointsScoringService               retoPointsScoringService;
+    private final RetoTeamBonusRepository                teamBonusRepo;
  
     // ─── Admin: Listar ────────────────────────────────────────────────────────
  
@@ -682,6 +683,7 @@ public class CompetitionService {
             for (CompetitionParticipant p : participants) {
                 Double score = teamPoints
                     ? retoPointsScoringService.scoreTeam(rosterIds(p.getGroup().getId()), start, end)
+                        + teamBonusRepo.sumPoints(c.getId(), p.getGroup().getId())
                     : activityRepo.sumGroupScore(p.getGroup().getId(), c.getMetricType().name(), start, end);
                 p.setGroupScore(score != null ? score : 0.0);
                 p.setRank(rank++);
@@ -1073,7 +1075,8 @@ public class CompetitionService {
                     p.getGroup().getId(),
                     p.getGroup().getName(),
                     roster,
-                    retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy)
+                    retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy),
+                    teamBonusRepo.sumPoints(c.getId(), p.getGroup().getId())
             ));
         }
         return teams;
@@ -1086,7 +1089,7 @@ public class CompetitionService {
                 .toList();
         String name = c.getScopeReference() != null ? c.getScopeReference().getName() : "Participantes";
         return toAdminTeam(null, name, roster,
-                retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy));
+                retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy), 0.0);
     }
 
     private List<Long> rosterIdsOf(List<User> roster) {
@@ -1097,7 +1100,8 @@ public class CompetitionService {
             Long groupId,
             String groupName,
             List<User> roster,
-            RetoPointsScoringService.Analisis analisis
+            RetoPointsScoringService.Analisis analisis,
+            double manualBonusPoints
     ) {
         Map<Long, User> byId = new LinkedHashMap<>();
         for (User u : roster) byId.putIfAbsent(u.getId(), u);
@@ -1125,11 +1129,12 @@ public class CompetitionService {
                 .groupId(groupId)
                 .groupName(groupName)
                 .rank(0)
-                .score(analisis.puntosEquipo())
+                .score(analisis.puntosEquipo() + manualBonusPoints)
                 .gapFromLeader(0)
                 .fuerzaPoints(analisis.fuerzaEquipo())
                 .librePoints(analisis.libreEquipo())
                 .teamBonusPoints(analisis.bonosDeEquipo())
+                .manualBonusPoints(manualBonusPoints)
                 .rosterSize(analisis.rosterSize())
                 .activeThisWeek(analisis.activosEstaSemana())
                 .participationPercent(analisis.participacionSemanalPercent())
