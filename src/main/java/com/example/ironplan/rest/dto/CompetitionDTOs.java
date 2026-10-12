@@ -266,6 +266,7 @@ public class CompetitionDTOs {
         private double fuerzaPoints;
         private double librePoints;
         private double teamBonusPoints;
+        private double manualBonusPoints;
         private int rosterSize;
         private int activeThisWeek;
         private double participationPercent;

@@ -6,13 +6,17 @@ import com.example.ironplan.model.CompetitionType;
 import com.example.ironplan.model.Level;
 import com.example.ironplan.rest.dto.CompetitionDTOs;
 import com.example.ironplan.rest.dto.RetoAdminActivityDTOs;
+import com.example.ironplan.rest.dto.RetoTeamBonusDTOs;
 import com.example.ironplan.service.CompetitionService;
 import com.example.ironplan.service.CompetitionPodiumService;
 import com.example.ironplan.service.RetoAdminActivityService;
+import com.example.ironplan.service.RetoTeamBonusService;
 import com.example.ironplan.model.RetoActivityReviewFlag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 //import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -30,6 +34,7 @@ class AdminCompetitionController {
     private final CompetitionService competitionService;
     private final CompetitionPodiumService podiumService;
     private final RetoAdminActivityService retoAdminActivityService;
+    private final RetoTeamBonusService retoTeamBonusService;
  
     @GetMapping
     public ResponseEntity<List<CompetitionDTOs.Response>> getAll(
@@ -128,6 +133,28 @@ class AdminCompetitionController {
         @Valid @RequestBody RetoAdminActivityDTOs.UpsertReviewRequest request
     ) {
         return ResponseEntity.ok(retoAdminActivityService.upsertReview(id, request));
+    }
+
+    @GetMapping("/{id}/team-bonuses")
+    public ResponseEntity<List<RetoTeamBonusDTOs.BonusItem>> listTeamBonuses(@PathVariable Long id) {
+        return ResponseEntity.ok(retoTeamBonusService.list(id));
+    }
+
+    @PostMapping(value = "/{id}/team-bonuses", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<RetoTeamBonusDTOs.BonusItem> createTeamBonus(
+        @PathVariable Long id,
+        @RequestParam Long groupId,
+        @RequestParam Double points,
+        @RequestParam String title,
+        @RequestParam(value = "file", required = false) MultipartFile file
+    ) {
+        return ResponseEntity.ok(retoTeamBonusService.create(id, groupId, points, title, file));
+    }
+
+    @DeleteMapping("/{id}/team-bonuses/{bonusId}")
+    public ResponseEntity<Void> deleteTeamBonus(@PathVariable Long id, @PathVariable Long bonusId) {
+        retoTeamBonusService.delete(id, bonusId);
+        return ResponseEntity.noContent().build();
     }
 }
  
