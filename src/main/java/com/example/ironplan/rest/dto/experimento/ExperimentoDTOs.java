@@ -122,8 +122,11 @@ public final class ExperimentoDTOs {
             long completaronSus,
             long participantesActivos,
             boolean posttestIpaqActivo,
-            boolean susActivo
+            boolean susActivo,
+            boolean mostrarAporteEquipo
     ) {}
+
+    public record AporteEquipoRequest(@NotNull Boolean visible) {}
 
     public record SnapshotGenerarResponse(int semanaGenerada, int usuariosProcesados) {}
 

@@ -178,6 +178,9 @@ public class CompetitionDTOs {
         private List<InternalRankingEntry> internalRanking;
         private WinnerInfo winner;
         private MyScore myScore;
+        /** False cuando el experimento oculta los puntos que el integrante aportó. */
+        @Builder.Default
+        private boolean mostrarAporteEquipo = true;
         private String metricLabel;
         private LocalDateTime lastCalculatedAt;
         private PodiumsResponse podiums;

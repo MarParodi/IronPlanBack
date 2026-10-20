@@ -61,6 +61,11 @@ public class ExperimentoReto {
     @Builder.Default
     private Boolean susActivo = false;
 
+    /** Si es false, el participante no ve los puntos que aportó al equipo. */
+    @Column(name = "mostrar_aporte_equipo", nullable = false)
+    @Builder.Default
+    private Boolean mostrarAporteEquipo = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
