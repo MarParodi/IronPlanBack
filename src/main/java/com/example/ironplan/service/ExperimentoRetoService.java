@@ -368,7 +368,9 @@ public class ExperimentoRetoService {
                 participanteRepo.countByRetoIdAndCompletoPosttestTrue(retoId),
                 participanteRepo.countByRetoIdAndCompletoSusTrue(retoId),
                 participanteRepo.countByRetoIdAndActivoTrue(retoId),
-                reto.getPosttestIpaqActivo(), reto.getSusActivo());
+                Boolean.TRUE.equals(reto.getPosttestIpaqActivo()),
+                Boolean.TRUE.equals(reto.getSusActivo()),
+                !Boolean.FALSE.equals(reto.getMostrarAporteEquipo()));
     }
 
     @Transactional(readOnly = true)
@@ -406,6 +408,14 @@ public class ExperimentoRetoService {
         ExperimentoReto reto = findRetoOrThrow(retoId);
         accessService.requireManage(reto.getOrganizacion());
         reto.setSusActivo(true);
+        retoRepo.save(reto);
+    }
+
+    @Transactional
+    public void setMostrarAporteEquipo(Long retoId, User admin, boolean visible) {
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        accessService.requireManage(reto.getOrganizacion());
+        reto.setMostrarAporteEquipo(visible);
         retoRepo.save(reto);
     }
 

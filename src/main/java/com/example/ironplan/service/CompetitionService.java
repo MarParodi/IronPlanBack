@@ -42,6 +42,7 @@ public class CompetitionService {
     private final LeaderboardCacheEvictor                leaderboardCacheEvictor;
     private final RetoPointsScoringService               retoPointsScoringService;
     private final RetoTeamBonusRepository                teamBonusRepo;
+    private final ExperimentoRetoRepository              experimentoRetoRepo;
  
     // ─── Admin: Listar ────────────────────────────────────────────────────────
  
@@ -1235,8 +1236,17 @@ public class CompetitionService {
             }
         }
 
+        boolean mostrarAporte = experimentoRetoRepo.findByCompetitionId(competitionId)
+            .map(reto -> !Boolean.FALSE.equals(reto.getMostrarAporteEquipo()))
+            .orElse(true);
+        builder.mostrarAporteEquipo(mostrarAporte);
+
         try {
-            builder.myScore(getMyScore(competitionId, user));
+            CompetitionDTOs.MyScore myScore = getMyScore(competitionId, user);
+            if (!mostrarAporte && myScore != null) {
+                myScore.setIndividualScore(null);
+            }
+            builder.myScore(myScore);
         } catch (Exception ignored) {
             builder.myScore(null);
         }

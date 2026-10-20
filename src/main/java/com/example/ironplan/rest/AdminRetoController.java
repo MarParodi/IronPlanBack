@@ -112,6 +112,15 @@ public class AdminRetoController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/{retoId}/aporte-equipo")
+    public ResponseEntity<Void> aporteEquipo(
+            @PathVariable Long retoId,
+            @Valid @RequestBody ExperimentoDTOs.AporteEquipoRequest req,
+            @AuthenticationPrincipal User user) {
+        experimentoService.setMostrarAporteEquipo(retoId, user, Boolean.TRUE.equals(req.visible()));
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{retoId}/cerrar")
     public ResponseEntity<Void> cerrar(
             @PathVariable Long retoId,
