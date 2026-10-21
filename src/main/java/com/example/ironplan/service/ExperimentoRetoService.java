@@ -370,7 +370,7 @@ public class ExperimentoRetoService {
                 participanteRepo.countByRetoIdAndActivoTrue(retoId),
                 Boolean.TRUE.equals(reto.getPosttestIpaqActivo()),
                 Boolean.TRUE.equals(reto.getSusActivo()),
-                !Boolean.FALSE.equals(reto.getMostrarAporteEquipo()));
+                !Boolean.FALSE.equals(reto.getMostrarPosiciones()));
     }
 
     @Transactional(readOnly = true)
@@ -412,10 +412,10 @@ public class ExperimentoRetoService {
     }
 
     @Transactional
-    public void setMostrarAporteEquipo(Long retoId, User admin, boolean visible) {
+    public void setMostrarPosiciones(Long retoId, User admin, boolean visible) {
         ExperimentoReto reto = findRetoOrThrow(retoId);
         accessService.requireManage(reto.getOrganizacion());
-        reto.setMostrarAporteEquipo(visible);
+        reto.setMostrarPosiciones(visible);
         retoRepo.save(reto);
     }
 

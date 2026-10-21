@@ -1236,15 +1236,28 @@ public class CompetitionService {
             }
         }
 
-        boolean mostrarAporte = experimentoRetoRepo.findByCompetitionId(competitionId)
-            .map(reto -> !Boolean.FALSE.equals(reto.getMostrarAporteEquipo()))
+        var retoVinculado = experimentoRetoRepo.findByCompetitionId(competitionId);
+        boolean mostrarPosiciones = retoVinculado
+            .map(reto -> !Boolean.FALSE.equals(reto.getMostrarPosiciones()))
             .orElse(true);
-        builder.mostrarAporteEquipo(mostrarAporte);
+        builder.mostrarPosiciones(mostrarPosiciones);
+
+        boolean ocultarPosicionesAlViewer = !mostrarPosiciones && retoVinculado
+            .map(reto -> !accessService.canManage(user, reto.getOrganizacion()))
+            .orElse(false);
+        if (ocultarPosicionesAlViewer) {
+            builder.groupLeaderboard(List.of());
+            builder.memberLeaderboard(List.of());
+            builder.internalRanking(List.of());
+            builder.winner(null);
+        }
 
         try {
             CompetitionDTOs.MyScore myScore = getMyScore(competitionId, user);
-            if (!mostrarAporte && myScore != null) {
-                myScore.setIndividualScore(null);
+            if (ocultarPosicionesAlViewer && myScore != null) {
+                myScore.setGroupRank(null);
+                myScore.setMemberRank(null);
+                myScore.setInternalRank(null);
             }
             builder.myScore(myScore);
         } catch (Exception ignored) {

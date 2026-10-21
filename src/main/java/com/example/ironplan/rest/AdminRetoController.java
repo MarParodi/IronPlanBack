@@ -112,12 +112,12 @@ public class AdminRetoController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/{retoId}/aporte-equipo")
-    public ResponseEntity<Void> aporteEquipo(
+    @PostMapping("/{retoId}/posiciones")
+    public ResponseEntity<Void> posiciones(
             @PathVariable Long retoId,
-            @Valid @RequestBody ExperimentoDTOs.AporteEquipoRequest req,
+            @Valid @RequestBody ExperimentoDTOs.PosicionesRequest req,
             @AuthenticationPrincipal User user) {
-        experimentoService.setMostrarAporteEquipo(retoId, user, Boolean.TRUE.equals(req.visible()));
+        experimentoService.setMostrarPosiciones(retoId, user, Boolean.TRUE.equals(req.visible()));
         return ResponseEntity.ok().build();
     }
 
