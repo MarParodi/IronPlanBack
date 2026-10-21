@@ -5,6 +5,7 @@ import com.example.ironplan.model.FreeActivityType;
 import com.example.ironplan.model.RetoActivityReviewFlag;
 import com.example.ironplan.model.RetoActivitySource;
 import com.example.ironplan.repository.projection.ActividadLibreDetalle;
+import com.example.ironplan.repository.projection.ActividadLibreScoring;
 import com.example.ironplan.repository.projection.SesionFuerzaDetalle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -114,6 +115,14 @@ class RetoAdminActivityServiceTest {
         libres.add(new ActividadLibreDetalle(
                 id, userId, completed.minusMinutes(minutos), completed, tipo, null,
                 minutos * 60, null, "https://foto.test/evidencia.jpg"));
+    }
+
+    private void mixto (Long userId, int diaOffset, FreeActivityType tipo, int minutos) {
+        LocalDateTime completed = INICIO.plusDays(diaOffset).atTime(10, 0 );
+        libres.add(new ActividadLibreScoring(
+                userId, completed.minus(minutos), completed, tipo, null,
+
+        ));
     }
 
     private void fuerza(Long userId, int diaOffset, int minutos, boolean completada, long id) {

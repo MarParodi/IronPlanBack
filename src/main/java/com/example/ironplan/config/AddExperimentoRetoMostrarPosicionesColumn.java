@@ -13,21 +13,21 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 
 /**
- * Añade {@code experimento_reto.mostrar_aporte_equipo} antes de que Hibernate valide el
- * esquema ({@code ddl-auto=validate} en prod). Un {@code ApplicationRunner} llegaría
- * demasiado tarde: el contexto ni siquiera arranca si falta la columna.
+ * Añade {@code experimento_reto.mostrar_posiciones} antes de que Hibernate valide el
+ * esquema ({@code ddl-auto=validate} en prod). Si quedó la columna anterior
+ * {@code mostrar_aporte_equipo}, la renombra.
  */
 @Configuration
-public class AddExperimentoRetoMostrarAporteColumn {
+public class AddExperimentoRetoMostrarPosicionesColumn {
 
-    private static final Logger log = LoggerFactory.getLogger(AddExperimentoRetoMostrarAporteColumn.class);
+    private static final Logger log = LoggerFactory.getLogger(AddExperimentoRetoMostrarPosicionesColumn.class);
 
     @Bean
-    public static BeanPostProcessor experimentoRetoMostrarAporteColumnPatch() {
-        return new MostrarAporteColumnPatch();
+    public static BeanPostProcessor experimentoRetoMostrarPosicionesColumnPatch() {
+        return new MostrarPosicionesColumnPatch();
     }
 
-    private static final class MostrarAporteColumnPatch implements BeanPostProcessor, PriorityOrdered {
+    private static final class MostrarPosicionesColumnPatch implements BeanPostProcessor, PriorityOrdered {
         private boolean applied;
 
         @Override
@@ -48,19 +48,27 @@ public class AddExperimentoRetoMostrarAporteColumn {
     private static void apply(DataSource dataSource) {
         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
             if (!tableExists(st, "experimento_reto")) {
-                log.warn("experimento_reto no existe aún; se omite mostrar_aporte_equipo");
+                log.warn("experimento_reto no existe aún; se omite mostrar_posiciones");
+                return;
+            }
+            if (columnExists(st, "experimento_reto", "mostrar_posiciones")) {
                 return;
             }
             if (columnExists(st, "experimento_reto", "mostrar_aporte_equipo")) {
+                st.execute("""
+                        ALTER TABLE experimento_reto
+                        CHANGE mostrar_aporte_equipo mostrar_posiciones BOOLEAN NOT NULL DEFAULT TRUE
+                        """);
+                log.info("Renamed experimento_reto.mostrar_aporte_equipo to mostrar_posiciones");
                 return;
             }
             st.execute("""
                     ALTER TABLE experimento_reto
-                    ADD COLUMN mostrar_aporte_equipo BOOLEAN NOT NULL DEFAULT TRUE
+                    ADD COLUMN mostrar_posiciones BOOLEAN NOT NULL DEFAULT TRUE
                     """);
-            log.info("Added experimento_reto.mostrar_aporte_equipo");
+            log.info("Added experimento_reto.mostrar_posiciones");
         } catch (Exception e) {
-            throw new IllegalStateException("No se pudo agregar experimento_reto.mostrar_aporte_equipo", e);
+            throw new IllegalStateException("No se pudo agregar experimento_reto.mostrar_posiciones", e);
         }
     }
 
