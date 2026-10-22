@@ -116,15 +116,7 @@ class RetoAdminActivityServiceTest {
                 id, userId, completed.minusMinutes(minutos), completed, tipo, null,
                 minutos * 60, null, "https://foto.test/evidencia.jpg"));
     }
-
-    private void mixto (Long userId, int diaOffset, FreeActivityType tipo, int minutos) {
-        LocalDateTime completed = INICIO.plusDays(diaOffset).atTime(10, 0 );
-        libres.add(new ActividadLibreScoring(
-                userId, completed.minus(minutos), completed, tipo, null,
-
-        ));
-    }
-
+//prueba
     private void fuerza(Long userId, int diaOffset, int minutos, boolean completada, long id) {
         LocalDateTime inicio = INICIO.plusDays(diaOffset).atTime(8, 0);
         fuerzas.add(new SesionFuerzaDetalle(
