@@ -58,7 +58,7 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     /** Sesiones de fuerza completadas de todo un roster en una sola consulta (scoring TEAM_POINTS). */
     @Query("""
         SELECT new com.example.ironplan.repository.projection.SesionFuerzaScoring(
-            s.user.id, s.startedAt, s.completedAt, s.progressPercentage, s.completedExercises)
+            s.id, s.user.id, s.startedAt, s.completedAt, s.progressPercentage, s.completedExercises)
         FROM WorkoutSession s
         WHERE s.user.id IN :userIds
           AND s.status = com.example.ironplan.model.WorkoutSessionStatus.COMPLETED

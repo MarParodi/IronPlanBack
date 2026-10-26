@@ -11,6 +11,8 @@ public interface RetoActivityReviewRepository extends JpaRepository<RetoActivity
 
     List<RetoActivityReview> findByCompetition_Id(Long competitionId);
 
+    List<RetoActivityReview> findByCompetition_IdAndPointsVoidedTrue(Long competitionId);
+
     Optional<RetoActivityReview> findByCompetition_IdAndSourceAndSourceId(
             Long competitionId, RetoActivitySource source, Long sourceId);
 }

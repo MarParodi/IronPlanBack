@@ -662,7 +662,7 @@ public class CompetitionService {
 
             // TEAM_POINTS resuelve todo el roster de una vez; el resto suma por participante.
             Map<Long, Double> teamPointsByUser = teamPoints
-                ? retoPointsScoringService.scoreUsers(
+                ? retoPointsScoringService.scoreUsers(c.getId(),
                     members.stream().map(p -> p.getUser().getId()).distinct().toList(), start, end)
                 : Map.of();
 
@@ -683,7 +683,7 @@ public class CompetitionService {
             int rank = 1;
             for (CompetitionParticipant p : participants) {
                 Double score = teamPoints
-                    ? retoPointsScoringService.scoreTeam(rosterIds(p.getGroup().getId()), start, end)
+                    ? retoPointsScoringService.scoreTeam(c.getId(), rosterIds(p.getGroup().getId()), start, end)
                         + teamBonusRepo.sumPoints(c.getId(), p.getGroup().getId())
                     : activityRepo.sumGroupScore(p.getGroup().getId(), c.getMetricType().name(), start, end);
                 p.setGroupScore(score != null ? score : 0.0);
@@ -794,7 +794,7 @@ public class CompetitionService {
         // a quienes aún no puntúan, porque los bonos de equipo dependen de ellos.
         List<Map.Entry<Long, Double>> ordenado;
         if (c.getMetricType() == MetricType.TEAM_POINTS) {
-            ordenado = retoPointsScoringService.scoreUsers(userIds, start, end).entrySet().stream()
+            ordenado = retoPointsScoringService.scoreUsers(c.getId(), userIds, start, end).entrySet().stream()
                 .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
                 .collect(Collectors.toList());
         } else {
@@ -1076,7 +1076,7 @@ public class CompetitionService {
                     p.getGroup().getId(),
                     p.getGroup().getName(),
                     roster,
-                    retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy),
+                    retoPointsScoringService.analizar(c.getId(), rosterIdsOf(roster), start, end, hoy),
                     teamBonusRepo.sumPoints(c.getId(), p.getGroup().getId())
             ));
         }
@@ -1090,7 +1090,7 @@ public class CompetitionService {
                 .toList();
         String name = c.getScopeReference() != null ? c.getScopeReference().getName() : "Participantes";
         return toAdminTeam(null, name, roster,
-                retoPointsScoringService.analizar(rosterIdsOf(roster), start, end, hoy), 0.0);
+                retoPointsScoringService.analizar(c.getId(), rosterIdsOf(roster), start, end, hoy), 0.0);
     }
 
     private List<Long> rosterIdsOf(List<User> roster) {

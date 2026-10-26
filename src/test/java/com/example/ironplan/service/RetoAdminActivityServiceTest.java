@@ -2,6 +2,8 @@ package com.example.ironplan.service;
 
 import com.example.ironplan.config.RetoPointsProperties;
 import com.example.ironplan.model.FreeActivityType;
+import com.example.ironplan.model.RetoActivityKey;
+import com.example.ironplan.model.RetoActivityReview;
 import com.example.ironplan.model.RetoActivityReviewFlag;
 import com.example.ironplan.model.RetoActivitySource;
 import com.example.ironplan.repository.projection.ActividadLibreDetalle;
@@ -91,6 +93,46 @@ class RetoAdminActivityServiceTest {
 
         assertEquals(19 + 28 + 15, historial.getTotalPoints(), 0.5);
         assertTrue(historial.getDays().stream().anyMatch(d -> d.getLabel().contains("progreso")));
+    }
+
+    @Test
+    @DisplayName("Una actividad anulada aparece con 0 pts y estado ANULADA; la constancia se mantiene si queda otra válida")
+    void actividadAnuladaEnHistorial() {
+        fuerza(ANA, 0, 50, true, 10L);
+        libre(ANA, 0, FreeActivityType.CAMINATA, 30, 20L);
+        var anulada = RetoActivityReview.builder()
+                .source(RetoActivitySource.WORKOUT).sourceId(10L).pointsVoided(true)
+                .voidedAt(INICIO.atTime(12, 0)).build();
+
+        var historial = service.construirHistorial(
+                ANA, "Ana", INICIO, INICIO.plusDays(6), INICIO,
+                libres, fuerzas, List.of(), List.of(),
+                Map.of(new RetoActivityKey(RetoActivitySource.WORKOUT, 10L), anulada));
+
+        // 41 del ejemplo combinado menos los 22 de fuerza = 10 constancia + 9 caminata
+        assertEquals(19, historial.getTotalPoints(), 0.5);
+        var fuerzaEntry = historial.getDays().get(0).getEntries().stream()
+                .filter(e -> Long.valueOf(10L).equals(e.getSourceId())).findFirst().orElseThrow();
+        assertEquals(0, fuerzaEntry.getPoints(), 0.001);
+        assertEquals("ANULADA", fuerzaEntry.getValidationStatus());
+        assertTrue(fuerzaEntry.isPointsVoided());
+        assertEquals("Anulada por administrador", fuerzaEntry.getRuleApplied());
+    }
+
+    @Test
+    @DisplayName("Anular la única actividad del día también quita la constancia")
+    void anularUnicaActividadQuitaConstancia() {
+        libre(ANA, 0, FreeActivityType.CAMINATA, 30, 20L);
+        var anulada = RetoActivityReview.builder()
+                .source(RetoActivitySource.FREE_ACTIVITY).sourceId(20L).pointsVoided(true).build();
+
+        var historial = service.construirHistorial(
+                ANA, "Ana", INICIO, INICIO.plusDays(6), INICIO,
+                libres, fuerzas, List.of(), List.of(),
+                Map.of(new RetoActivityKey(RetoActivitySource.FREE_ACTIVITY, 20L), anulada));
+
+        assertEquals(0, historial.getTotalPoints(), 0.001);
+        assertTrue(historial.getDays().get(0).getEntries().stream().noneMatch(e -> "CONSTANCIA".equals(e.getKind())));
     }
 
     @Test

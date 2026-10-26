@@ -135,6 +135,15 @@ class AdminCompetitionController {
         return ResponseEntity.ok(retoAdminActivityService.upsertReview(id, request));
     }
 
+    /** Anula o restaura los puntos de una actividad; devuelve el historial del participante ya recalculado. */
+    @PutMapping("/{id}/activity-reviews/voided")
+    public ResponseEntity<RetoAdminActivityDTOs.PointHistory> setActivityVoided(
+        @PathVariable Long id,
+        @Valid @RequestBody RetoAdminActivityDTOs.VoidPointsRequest request
+    ) {
+        return ResponseEntity.ok(retoAdminActivityService.setActivityVoided(id, request));
+    }
+
     @GetMapping("/{id}/team-bonuses")
     public ResponseEntity<List<RetoTeamBonusDTOs.BonusItem>> listTeamBonuses(@PathVariable Long id) {
         return ResponseEntity.ok(retoTeamBonusService.list(id));

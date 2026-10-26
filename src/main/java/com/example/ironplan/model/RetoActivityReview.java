@@ -57,6 +57,18 @@ public class RetoActivityReview {
     @Column(name = "marked_at", nullable = false)
     private LocalDateTime markedAt;
 
+    /** Puntos anulados por un administrador: la actividad no suma al reto. */
+    @Column(name = "points_voided", nullable = false)
+    @Builder.Default
+    private boolean pointsVoided = false;
+
+    @Column(name = "voided_at")
+    private LocalDateTime voidedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voided_by_user_id")
+    private User voidedBy;
+
     @PrePersist
     void onCreate() {
         if (markedAt == null) markedAt = LocalDateTime.now();

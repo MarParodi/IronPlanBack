@@ -3,7 +3,11 @@ package com.example.ironplan.service;
 import com.example.ironplan.config.AppTime;
 import com.example.ironplan.config.RetoPointsProperties;
 import com.example.ironplan.model.MetricType;
+import com.example.ironplan.model.RetoActivityKey;
+import com.example.ironplan.model.RetoActivityReview;
+import com.example.ironplan.model.RetoActivitySource;
 import com.example.ironplan.repository.FreeActivitySessionRepository;
+import com.example.ironplan.repository.RetoActivityReviewRepository;
 import com.example.ironplan.repository.UserActivityRepository;
 import com.example.ironplan.repository.WorkoutSessionRepository;
 import com.example.ironplan.repository.WorkoutSetRepository;
@@ -46,6 +50,7 @@ public class RetoPointsScoringService {
     private final WorkoutSessionRepository workoutSessionRepo;
     private final UserActivityRepository activityRepo;
     private final WorkoutSetRepository workoutSetRepo;
+    private final RetoActivityReviewRepository reviewRepo;
     private final RetoPointsProperties props;
 
     public enum Modalidad { FUERZA, LIBRE }
@@ -125,31 +130,64 @@ public class RetoPointsScoringService {
     /** Puntaje individual de cada usuario del roster. Incluye a los que no puntuaron, con 0.0. */
     @Transactional(readOnly = true)
     public Map<Long, Double> scoreUsers(Collection<Long> userIds, LocalDate start, LocalDate end) {
+        return scoreUsers(null, userIds, start, end);
+    }
+
+    /**
+     * Igual que {@link #scoreUsers(Collection, LocalDate, LocalDate)} pero excluye las
+     * actividades cuyos puntos fueron anulados por un administrador en esa competencia.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Double> scoreUsers(Long competitionId, Collection<Long> userIds, LocalDate start, LocalDate end) {
         Map<Long, Double> resultado = new LinkedHashMap<>();
         for (Long id : userIds) resultado.put(id, 0.0);
-        analizar(userIds, start, end).usuarios().forEach((id, u) -> resultado.put(id, u.puntos()));
+        analizar(competitionId, userIds, start, end, AppTime.today())
+                .usuarios().forEach((id, u) -> resultado.put(id, u.puntos()));
         return resultado;
     }
 
     /** Puntaje del equipo: suma de sus integrantes más los bonos de participación colectiva. */
     @Transactional(readOnly = true)
     public double scoreTeam(Collection<Long> rosterIds, LocalDate start, LocalDate end) {
-        return analizar(rosterIds, start, end).puntosEquipo();
+        return scoreTeam(null, rosterIds, start, end);
+    }
+
+    @Transactional(readOnly = true)
+    public double scoreTeam(Long competitionId, Collection<Long> rosterIds, LocalDate start, LocalDate end) {
+        return analizar(competitionId, rosterIds, start, end, AppTime.today()).puntosEquipo();
     }
 
     @Transactional(readOnly = true)
     public Analisis analizar(Collection<Long> userIds, LocalDate start, LocalDate end) {
-        return analizar(userIds, start, end, AppTime.today());
+        return analizar(null, userIds, start, end, AppTime.today());
     }
 
     @Transactional(readOnly = true)
     public Analisis analizar(Collection<Long> userIds, LocalDate start, LocalDate end, LocalDate hoy) {
+        return analizar(null, userIds, start, end, hoy);
+    }
+
+    /**
+     * @param competitionId si no es null, se descartan las actividades anuladas por un
+     *                      administrador en esa competencia antes de puntuar.
+     */
+    @Transactional(readOnly = true)
+    public Analisis analizar(Long competitionId, Collection<Long> userIds, LocalDate start, LocalDate end, LocalDate hoy) {
         if (!esRangoValido(userIds, start, end)) {
             return vacio(userIds, start, end, hoy);
         }
         LocalDate referencia = hoy != null ? hoy : AppTime.today();
-        Contexto ctx = cargar(userIds, start, end, referencia);
+        Contexto ctx = cargar(userIds, start, end, referencia, anuladas(competitionId));
         return ctx.analisis();
+    }
+
+    private Set<RetoActivityKey> anuladas(Long competitionId) {
+        if (competitionId == null || reviewRepo == null) return Set.of();
+        Set<RetoActivityKey> keys = new HashSet<>();
+        for (RetoActivityReview r : reviewRepo.findByCompetition_IdAndPointsVoidedTrue(competitionId)) {
+            keys.add(RetoActivityKey.of(r));
+        }
+        return keys;
     }
 
     private boolean esRangoValido(Collection<Long> userIds, LocalDate start, LocalDate end) {
@@ -169,7 +207,8 @@ public class RetoPointsScoringService {
 
     // ─── Carga de datos ───────────────────────────────────────────────────────
 
-    private Contexto cargar(Collection<Long> userIds, LocalDate start, LocalDate end, LocalDate hoy) {
+    private Contexto cargar(
+            Collection<Long> userIds, LocalDate start, LocalDate end, LocalDate hoy, Set<RetoActivityKey> anuladas) {
         LocalDateTime desde = start.atStartOfDay();
         LocalDateTime hasta = end.atTime(LocalTime.MAX);
         int semanas = (int) (ChronoUnit.DAYS.between(start, end) / 7) + 1;
@@ -178,11 +217,13 @@ public class RetoPointsScoringService {
         for (Long id : userIds) actividades.put(id, new ArrayList<>());
 
         for (var a : freeActivityRepo.findScoringDataForUsers(userIds, desde, hasta)) {
+            if (anuladas.contains(new RetoActivityKey(RetoActivitySource.FREE_ACTIVITY, a.id()))) continue;
             Actividad valida = validarActividadLibre(a);
             List<Actividad> dest = valida == null ? null : actividades.get(a.userId());
             if (dest != null) dest.add(valida);
         }
         for (var s : workoutSessionRepo.findScoringDataForUsers(userIds, desde, hasta)) {
+            if (anuladas.contains(new RetoActivityKey(RetoActivitySource.WORKOUT, s.id()))) continue;
             Actividad valida = validarSesionFuerza(s);
             List<Actividad> dest = valida == null ? null : actividades.get(s.userId());
             if (dest != null) dest.add(valida);
