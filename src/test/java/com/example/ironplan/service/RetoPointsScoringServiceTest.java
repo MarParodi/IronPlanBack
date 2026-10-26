@@ -3,7 +3,10 @@ package com.example.ironplan.service;
 import com.example.ironplan.config.RetoPointsProperties;
 import com.example.ironplan.model.FreeActivityType;
 import com.example.ironplan.model.MetricType;
+import com.example.ironplan.model.RetoActivityReview;
+import com.example.ironplan.model.RetoActivitySource;
 import com.example.ironplan.repository.FreeActivitySessionRepository;
+import com.example.ironplan.repository.RetoActivityReviewRepository;
 import com.example.ironplan.repository.UserActivityRepository;
 import com.example.ironplan.repository.WorkoutSessionRepository;
 import com.example.ironplan.repository.WorkoutSetRepository;
@@ -40,11 +43,14 @@ class RetoPointsScoringServiceTest {
     private WorkoutSessionRepository workoutSessionRepo;
     private UserActivityRepository activityRepo;
     private WorkoutSetRepository workoutSetRepo;
+    private RetoActivityReviewRepository reviewRepo;
     private RetoPointsProperties props;
     private RetoPointsScoringService service;
 
     private final List<ActividadLibreScoring> libres = new ArrayList<>();
     private final List<SesionFuerzaScoring> fuerzas = new ArrayList<>();
+    private final List<RetoActivityReview> anuladas = new ArrayList<>();
+    private long nextId = 1;
 
     @BeforeEach
     void setUp() {
@@ -52,9 +58,12 @@ class RetoPointsScoringServiceTest {
         workoutSessionRepo = mock(WorkoutSessionRepository.class);
         activityRepo = mock(UserActivityRepository.class);
         workoutSetRepo = mock(WorkoutSetRepository.class);
+        reviewRepo = mock(RetoActivityReviewRepository.class);
         props = new RetoPointsProperties();
         service = new RetoPointsScoringService(
-                freeActivityRepo, workoutSessionRepo, activityRepo, workoutSetRepo, props);
+                freeActivityRepo, workoutSessionRepo, activityRepo, workoutSetRepo, reviewRepo, props);
+
+        when(reviewRepo.findByCompetition_IdAndPointsVoidedTrue(any())).thenReturn(anuladas);
 
         when(freeActivityRepo.findScoringDataForUsers(anyCollection(), any(), any())).thenReturn(libres);
         when(workoutSessionRepo.findScoringDataForUsers(anyCollection(), any(), any())).thenReturn(fuerzas);
@@ -173,7 +182,7 @@ class RetoPointsScoringServiceTest {
     void actividadesInvalidas() {
         libre(ANA, 0, FreeActivityType.RUNNING, 9);
         libres.add(new ActividadLibreScoring(
-                ANA, INICIO.atTime(10, 0), FreeActivityType.RUNNING, 30 * 60, null));
+                nextId++, ANA, INICIO.atTime(10, 0), FreeActivityType.RUNNING, 30 * 60, null));
 
         assertEquals(0, puntaje(ANA), 0.001);
     }
@@ -182,9 +191,39 @@ class RetoPointsScoringServiceTest {
     @DisplayName("Una sesión de fuerza sin trabajo efectivo no puntúa")
     void fuerzaSinTrabajoEfectivo() {
         fuerzas.add(new SesionFuerzaScoring(
-                ANA, INICIO.atTime(8, 0), INICIO.atTime(9, 0), 0.0, 0));
+                nextId++, ANA, INICIO.atTime(8, 0), INICIO.atTime(9, 0), 0.0, 0));
 
         assertEquals(0, puntaje(ANA), 0.001);
+    }
+
+    // ─── Anulación administrativa ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Una actividad anulada por el admin no suma ni cuenta como día activo en esa competencia")
+    void actividadAnuladaNoPuntua() {
+        long caminataId = libre(ANA, 0, FreeActivityType.CAMINATA, 30);
+        double conCaminata = puntajeEnCompetencia(ANA, 9L);
+
+        anuladas.add(RetoActivityReview.builder()
+                .source(RetoActivitySource.FREE_ACTIVITY).sourceId(caminataId).pointsVoided(true).build());
+
+        assertEquals(0, puntajeEnCompetencia(ANA, 9L), 0.001);
+        assertEquals(conCaminata, puntaje(ANA), 0.001, "sin competencia no se aplican anulaciones");
+    }
+
+    @Test
+    @DisplayName("Anular una de dos actividades del día conserva la constancia y los puntos de la otra")
+    void anularUnaDeDosActividades() {
+        long fuerzaId = fuerza(ANA, 0, 50, true);
+        libre(ANA, 0, FreeActivityType.CAMINATA, 30);
+        double soloCaminata = props.getConstanciaPorDia()
+                + (30.0 / props.getMinutosPorBloque()) * props.getPuntosPorBloque()
+                    * props.intensidadDe(FreeActivityType.CAMINATA);
+
+        anuladas.add(RetoActivityReview.builder()
+                .source(RetoActivitySource.WORKOUT).sourceId(fuerzaId).pointsVoided(true).build());
+
+        assertEquals(soloCaminata, puntajeEnCompetencia(ANA, 9L), 0.001);
     }
 
     // ─── Bonos de equipo (§14 y §15) ──────────────────────────────────────────
@@ -255,25 +294,31 @@ class RetoPointsScoringServiceTest {
         fuerzas.clear();
     }
 
-    private void libre(Long userId, int diaOffset, FreeActivityType tipo, int minutos) {
+    private long libre(Long userId, int diaOffset, FreeActivityType tipo, int minutos) {
+        long id = nextId++;
         libres.add(new ActividadLibreScoring(
+                id,
                 userId,
                 INICIO.plusDays(diaOffset).atTime(10, 0),
                 tipo,
                 minutos * 60,
                 "https://foto.test/evidencia.jpg"
         ));
+        return id;
     }
 
-    private void fuerza(Long userId, int diaOffset, int minutos, boolean completada) {
+    private long fuerza(Long userId, int diaOffset, int minutos, boolean completada) {
+        long id = nextId++;
         LocalDateTime inicio = INICIO.plusDays(diaOffset).atTime(8, 0);
         fuerzas.add(new SesionFuerzaScoring(
+                id,
                 userId,
                 inicio,
                 inicio.plusMinutes(minutos),
                 completada ? 100.0 : 60.0,
                 3
         ));
+        return id;
     }
 
     private double puntaje(Long userId) {
@@ -284,5 +329,10 @@ class RetoPointsScoringServiceTest {
         Collection<Long> roster = List.of(ANA, LUIS);
         Map<Long, Double> scores = service.scoreUsers(roster, INICIO, INICIO.plusDays(diasDeReto));
         return scores.get(userId);
+    }
+
+    private double puntajeEnCompetencia(Long userId, Long competitionId) {
+        Collection<Long> roster = List.of(ANA, LUIS);
+        return service.scoreUsers(competitionId, roster, INICIO, INICIO.plusDays(6)).get(userId);
     }
 }

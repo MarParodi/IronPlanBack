@@ -50,6 +50,10 @@ public class RetoAdminActivityDTOs {
         private List<RetoActivityReviewFlag> adminFlags = new ArrayList<>();
         private String adminNote;
         private RetoActivityReviewStatus reviewStatus;
+        /** Puntos anulados por un administrador (la actividad no suma al reto). */
+        private boolean pointsVoided;
+        private LocalDateTime voidedAt;
+        private String voidedByName;
     }
 
     @Getter @Setter @Builder
@@ -77,6 +81,9 @@ public class RetoAdminActivityDTOs {
         private List<RetoActivityReviewFlag> adminFlags = new ArrayList<>();
         private String adminNote;
         private RetoActivityReviewStatus reviewStatus;
+        private boolean pointsVoided;
+        private LocalDateTime voidedAt;
+        private String voidedByName;
     }
 
     @Getter @Setter
@@ -89,5 +96,16 @@ public class RetoAdminActivityDTOs {
         private List<RetoActivityReviewFlag> flags = new ArrayList<>();
         private String note;
         private RetoActivityReviewStatus status;
+    }
+
+    /** Anular ({@code voided=true}) o restaurar ({@code voided=false}) los puntos de una actividad. */
+    @Getter @Setter
+    @NoArgsConstructor @AllArgsConstructor
+    public static class VoidPointsRequest {
+        @NotNull
+        private RetoActivitySource source;
+        @NotNull
+        private Long sourceId;
+        private boolean voided = true;
     }
 }

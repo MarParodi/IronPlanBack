@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 
 /** Datos mínimos de una actividad libre para el cálculo de {@code TEAM_POINTS}. */
 public record ActividadLibreScoring(
+        Long id,
         Long userId,
         LocalDateTime completedAt,
         FreeActivityType activityType,

@@ -171,7 +171,7 @@ public class SnapshotService {
             for (Long id : userIds) ceros.put(id, 0.0);
             return ceros;
         }
-        return retoPointsScoringService.scoreUsers(userIds, inicio, fin);
+        return retoPointsScoringService.scoreUsers(c.getId(), userIds, inicio, fin);
     }
 
     record DatosSemana(

@@ -59,7 +59,7 @@ class SnapshotServiceTest {
         SnapshotSemanalUsuario previo = SnapshotSemanalUsuario.builder()
                 .id(77L).numeroSemana(1).semanaCompleta(false).build();
         prepararMocks(reto, participante(user), previo);
-        when(scoringService.scoreUsers(any(), eq(reto.getFechaInicio()), eq(reto.getFechaInicio().plusDays(6))))
+        when(scoringService.scoreUsers(eq(4L), any(), eq(reto.getFechaInicio()), eq(reto.getFechaInicio().plusDays(6))))
                 .thenReturn(java.util.Map.of(user.getId(), 41.0));
 
         service.actualizarSnapshotsPendientes(reto.getId());

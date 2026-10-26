@@ -290,7 +290,7 @@ public class DevMetricsEnhancer implements CommandLineRunner {
             List<CompetitionMemberParticipant> members =
                     competitionMemberParticipantRepository.findLeaderboard(c.getId());
             java.util.Map<Long, Double> teamPointsByUser = teamPoints
-                    ? retoPointsScoringService.scoreUsers(
+                    ? retoPointsScoringService.scoreUsers(c.getId(),
                         members.stream().map(p -> p.getUser().getId()).distinct().toList(), start, end)
                     : java.util.Map.of();
             int rank = 1;
@@ -310,7 +310,7 @@ public class DevMetricsEnhancer implements CommandLineRunner {
             int rank = 1;
             for (CompetitionParticipant p : participants) {
                 Double score = teamPoints
-                        ? retoPointsScoringService.scoreTeam(rosterIds(p.getGroup().getId()), start, end)
+                        ? retoPointsScoringService.scoreTeam(c.getId(), rosterIds(p.getGroup().getId()), start, end)
                         : activityRepository.sumGroupScore(
                             p.getGroup().getId(), c.getMetricType().name(), start, end);
                 p.setGroupScore(score != null ? score : 0.0);

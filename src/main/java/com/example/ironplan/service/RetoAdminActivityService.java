@@ -4,6 +4,7 @@ import com.example.ironplan.config.AppTime;
 import com.example.ironplan.config.RetoPointsProperties;
 import com.example.ironplan.model.FreeActivityType;
 import com.example.ironplan.model.MetricType;
+import com.example.ironplan.model.RetoActivityKey;
 import com.example.ironplan.model.RetoActivityReview;
 import com.example.ironplan.model.RetoActivityReviewFlag;
 import com.example.ironplan.model.RetoActivityReviewStatus;
@@ -82,7 +83,7 @@ public class RetoAdminActivityService {
         List<MetricaDiariaUsuario> volumen = activityRepo.sumDailyMetricByUser(
                 ids, MetricType.VOLUME_TOTAL, scope.start(), scope.end());
         List<OneRmDiarioUsuario> oneRm = workoutSetRepo.findDailyMaxOneRmForUsers(ids, scope.start(), scope.end());
-        Map<SourceKey, RetoActivityReview> reviews = indexReviews(scope.competition().getId());
+        Map<RetoActivityKey, RetoActivityReview> reviews = indexReviews(scope.competition().getId());
         return construirHistorial(
                 userId, fullName(user), scope.start(), scope.end(), AppTime.today(),
                 libres, fuerzas, volumen, oneRm, reviews);
@@ -98,7 +99,7 @@ public class RetoAdminActivityService {
         LocalDateTime hasta = scope.end().atTime(LocalTime.MAX);
         List<ActividadLibreDetalle> libres = freeActivityRepo.findDetalleForUsers(scope.userIds(), desde, hasta);
         List<SesionFuerzaDetalle> fuerzas = workoutSessionRepo.findDetalleForUsers(scope.userIds(), desde, hasta);
-        Map<SourceKey, RetoActivityReview> reviews = indexReviews(scope.competition().getId());
+        Map<RetoActivityKey, RetoActivityReview> reviews = indexReviews(scope.competition().getId());
         Map<Long, String> names = scope.roster().stream()
                 .collect(Collectors.toMap(User::getId, RetoAdminActivityService::fullName, (a, b) -> a));
         List<RetoAdminActivityDTOs.ActivityReviewItem> items =
@@ -144,6 +145,55 @@ public class RetoAdminActivityService {
         return toReviewItem(raw, entity, fullName(participant), suggested);
     }
 
+    /**
+     * Anula o restaura los puntos de una actividad concreta. Persiste la marca en la
+     * revisión (sin tocar etiquetas, nota ni estado), recalcula el ranking de inmediato
+     * y devuelve el historial del participante ya actualizado.
+     */
+    @Transactional
+    public RetoAdminActivityDTOs.PointHistory setActivityVoided(
+            Long competitionId, RetoAdminActivityDTOs.VoidPointsRequest req) {
+        CompetitionService.RetoAdminScope scope = competitionService.requireRetoAdminScope(competitionId);
+        if (req.getSource() == null || req.getSourceId() == null) {
+            throw new IllegalArgumentException("Fuente e identificador de la actividad son obligatorios");
+        }
+        RawActivity raw = findRaw(scope, req.getSource(), req.getSourceId());
+        User participant = scope.findUser(raw.userId);
+        if (participant == null) {
+            throw new IllegalArgumentException("El usuario no participa en este reto");
+        }
+        User admin = accessService.getCurrentUser();
+        User adminRef = admin != null ? userRepo.findById(admin.getId()).orElse(admin) : null;
+
+        RetoActivityReview entity = reviewRepo
+                .findByCompetition_IdAndSourceAndSourceId(competitionId, req.getSource(), req.getSourceId())
+                .orElseGet(() -> {
+                    RetoActivityReview nuevo = new RetoActivityReview();
+                    nuevo.setCompetition(scope.competition());
+                    nuevo.setUser(participant);
+                    nuevo.setSource(req.getSource());
+                    nuevo.setSourceId(req.getSourceId());
+                    nuevo.setStatus(RetoActivityReviewStatus.REVIEWED);
+                    nuevo.setMarkedBy(adminRef);
+                    nuevo.setMarkedAt(LocalDateTime.now());
+                    return nuevo;
+                });
+        if (req.isVoided()) {
+            entity.setPointsVoided(true);
+            entity.setVoidedAt(LocalDateTime.now());
+            entity.setVoidedBy(adminRef);
+        } else {
+            entity.setPointsVoided(false);
+            entity.setVoidedAt(null);
+            entity.setVoidedBy(null);
+        }
+        reviewRepo.save(entity);
+        reviewRepo.flush();
+
+        competitionService.recalculateScoresManual(competitionId);
+        return getPointHistory(competitionId, raw.userId);
+    }
+
     RetoAdminActivityDTOs.PointHistory construirHistorial(
             Long userId,
             String fullName,
@@ -154,9 +204,10 @@ public class RetoAdminActivityService {
             List<SesionFuerzaDetalle> fuerzas,
             List<MetricaDiariaUsuario> volumen,
             List<OneRmDiarioUsuario> oneRm,
-            Map<SourceKey, RetoActivityReview> reviews
+            Map<RetoActivityKey, RetoActivityReview> reviews
     ) {
         List<RawActivity> raws = clasificar(libres, fuerzas);
+        aplicarAnulaciones(raws, reviews);
         raws.sort(Comparator.comparing(r -> r.completedAt != null ? r.completedAt : r.startedAt));
 
         int semanas = (int) (ChronoUnit.DAYS.between(start, end) / 7) + 1;
@@ -310,20 +361,36 @@ public class RetoAdminActivityService {
     List<RetoAdminActivityDTOs.ActivityReviewItem> construirCola(
             List<ActividadLibreDetalle> libres,
             List<SesionFuerzaDetalle> fuerzas,
-            Map<SourceKey, RetoActivityReview> reviews,
+            Map<RetoActivityKey, RetoActivityReview> reviews,
             Map<Long, String> names
     ) {
         List<RawActivity> raws = clasificar(libres, fuerzas);
         aplicarHeuristicasColectivas(raws);
         List<RetoAdminActivityDTOs.ActivityReviewItem> items = new ArrayList<>();
         for (RawActivity raw : raws) {
-            RetoActivityReview review = reviews.get(new SourceKey(raw.source, raw.id));
+            RetoActivityReview review = reviews.get(new RetoActivityKey(raw.source, raw.id));
             if (raw.suggested.isEmpty() && review == null) continue;
             items.add(toReviewItem(raw, review, names.getOrDefault(raw.userId, "Usuario"), new ArrayList<>(raw.suggested)));
         }
         items.sort(Comparator.comparing(RetoAdminActivityDTOs.ActivityReviewItem::getOccurredAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
         return items;
+    }
+
+    /**
+     * Una actividad anulada por el admin deja de ser válida: puntúa 0 y no cuenta para
+     * la constancia del día, el tope de actividades ni el progreso semanal.
+     */
+    private void aplicarAnulaciones(List<RawActivity> raws, Map<RetoActivityKey, RetoActivityReview> reviews) {
+        if (reviews == null || reviews.isEmpty()) return;
+        for (RawActivity r : raws) {
+            RetoActivityReview review = reviews.get(new RetoActivityKey(r.source, r.id));
+            if (review != null && review.isPointsVoided()) {
+                r.voided = true;
+                r.valid = false;
+                r.invalidReason = "Anulada por administrador";
+            }
+        }
     }
 
     private List<RawActivity> clasificar(List<ActividadLibreDetalle> libres, List<SesionFuerzaDetalle> fuerzas) {
@@ -536,19 +603,22 @@ public class RetoAdminActivityService {
                 .orElseThrow(() -> new IllegalArgumentException("Sesión no encontrada en el período del reto"));
     }
 
-    private Map<SourceKey, RetoActivityReview> indexReviews(Long competitionId) {
-        Map<SourceKey, RetoActivityReview> map = new HashMap<>();
+    private Map<RetoActivityKey, RetoActivityReview> indexReviews(Long competitionId) {
+        Map<RetoActivityKey, RetoActivityReview> map = new HashMap<>();
         for (RetoActivityReview r : reviewRepo.findByCompetition_Id(competitionId)) {
-            map.put(new SourceKey(r.getSource(), r.getSourceId()), r);
+            map.put(new RetoActivityKey(r.getSource(), r.getSourceId()), r);
         }
         return map;
     }
 
-    private RetoAdminActivityDTOs.HistoryEntry toHistoryEntry(RawActivity a, Map<SourceKey, RetoActivityReview> reviews) {
-        RetoActivityReview review = reviews.get(new SourceKey(a.source, a.id));
+    private RetoAdminActivityDTOs.HistoryEntry toHistoryEntry(RawActivity a, Map<RetoActivityKey, RetoActivityReview> reviews) {
+        RetoActivityReview review = reviews.get(new RetoActivityKey(a.source, a.id));
         String status = a.validationStatus;
         if (review != null && review.getStatus() == RetoActivityReviewStatus.PENDING_REVIEW) {
             status = "EN_REVISION";
+        }
+        if (a.voided) {
+            status = "ANULADA";
         }
         return RetoAdminActivityDTOs.HistoryEntry.builder()
                 .kind("ACTIVITY")
@@ -566,7 +636,14 @@ public class RetoAdminActivityService {
                 .adminFlags(parseFlags(review != null ? review.getFlags() : null))
                 .adminNote(review != null ? review.getNote() : null)
                 .reviewStatus(review != null ? review.getStatus() : null)
+                .pointsVoided(review != null && review.isPointsVoided())
+                .voidedAt(review != null && review.isPointsVoided() ? review.getVoidedAt() : null)
+                .voidedByName(review != null && review.isPointsVoided() ? voidedByName(review) : null)
                 .build();
+    }
+
+    private static String voidedByName(RetoActivityReview review) {
+        return review.getVoidedBy() != null ? fullName(review.getVoidedBy()) : null;
     }
 
     private RetoAdminActivityDTOs.ActivityReviewItem toReviewItem(
@@ -585,6 +662,9 @@ public class RetoAdminActivityService {
                 .adminFlags(parseFlags(review != null ? review.getFlags() : null))
                 .adminNote(review != null ? review.getNote() : null)
                 .reviewStatus(review != null ? review.getStatus() : null)
+                .pointsVoided(review != null && review.isPointsVoided())
+                .voidedAt(review != null && review.isPointsVoided() ? review.getVoidedAt() : null)
+                .voidedByName(review != null && review.isPointsVoided() ? voidedByName(review) : null)
                 .build();
     }
 
@@ -695,8 +775,6 @@ public class RetoAdminActivityService {
         return value == null || value.isBlank() ? null : value;
     }
 
-    record SourceKey(RetoActivitySource source, Long sourceId) {}
-
     static final class RawActivity {
         Long id;
         Long userId;
@@ -713,6 +791,7 @@ public class RetoAdminActivityService {
         String dataSource;
         boolean modalidadLibre;
         boolean valid;
+        boolean voided;
         String invalidReason;
         double esfuerzo;
         double minutosPonderados;
