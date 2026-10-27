@@ -40,6 +40,8 @@ public class RetoAdminActivityDTOs {
         private String activityType;
         private String activityLabel;
         private Integer durationMinutes;
+        /** Kilómetros registrados, solo en actividades libres que traen distancia. */
+        private Double distanceKm;
         private LocalDateTime occurredAt;
         private double points;
         private String ruleApplied;
