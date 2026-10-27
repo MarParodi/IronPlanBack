@@ -627,6 +627,7 @@ public class RetoAdminActivityService {
                 .activityType(a.activityType)
                 .activityLabel(a.activityLabel)
                 .durationMinutes(Math.max(0, (int) Math.round(a.durationSeconds / 60.0)))
+                .distanceKm(a.distanceKm != null && a.distanceKm > 0 ? a.distanceKm : null)
                 .occurredAt(a.completedAt != null ? a.completedAt : a.startedAt)
                 .points(a.points)
                 .ruleApplied(a.ruleApplied)
