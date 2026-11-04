@@ -34,7 +34,7 @@ public class ExperimentExportService {
         ExperimentoReto reto = retoRepo.findById(retoId)
                 .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
         accessService.requireManage(reto.getOrganizacion());
-        snapshotService.actualizarSnapshotsPendientes(retoId);
+        snapshotService.recalcularSemanasTranscurridas(retoId);
 
         int semanasIntervencion = reto.getSemanasIntervencion() != null ? reto.getSemanasIntervencion() : 8;
         int semInicio = 1;
@@ -148,7 +148,7 @@ public class ExperimentExportService {
         ExperimentoReto reto = retoRepo.findById(retoId)
                 .orElseThrow(() -> new IllegalArgumentException("Reto no encontrado"));
         accessService.requireManage(reto.getOrganizacion());
-        snapshotService.actualizarSnapshotsPendientes(retoId);
+        snapshotService.recalcularSemanasTranscurridas(retoId);
 
         int semanas = snapshotService.semanasTranscurridas(reto);
 

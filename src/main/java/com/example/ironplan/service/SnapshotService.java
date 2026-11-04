@@ -82,6 +82,13 @@ public class SnapshotService {
         return generarSemanas(reto, 1, semanasTranscurridas(reto), Modo.PENDIENTES);
     }
 
+    /** Exportación: reescribe todas las semanas ya transcurridas, sin cerrar el reto ni la competencia. */
+    @Transactional
+    public ExperimentoDTOs.SnapshotGenerarResponse recalcularSemanasTranscurridas(Long retoId) {
+        ExperimentoReto reto = findRetoOrThrow(retoId);
+        return generarSemanas(reto, 1, semanasTranscurridas(reto), Modo.TODAS);
+    }
+
     /** Al cerrar el reto: recalcula todas las semanas de intervención. */
     @Transactional
     public ExperimentoDTOs.SnapshotGenerarResponse generarSnapshotsRetroactivos(Long retoId, User admin) {
@@ -141,10 +148,14 @@ public class SnapshotService {
         List<Long> userIds = aProcesar.stream().map(p -> p.getUsuario().getId()).toList();
         Map<Long, Double> puntosAcum = puntosReto(reto, userIds, finSemana);
         Map<Long, Double> puntosPrev = puntosReto(reto, userIds, inicioSemana.minusDays(1));
+        Map<Long, Integer> posiciones = posicionesDeLaSemana(reto, participantes, finSemana);
 
         for (ParticipanteReto p : aProcesar) {
             Long userId = p.getUsuario().getId();
-            DatosSemana datos = cargarDatos(reto, p, inicioSemana, finSemana, puntosAcum, puntosPrev);
+            Integer posicion = posiciones != null
+                    ? posiciones.get(userId)
+                    : obtenerPosicionLeaderboard(reto, userId);
+            DatosSemana datos = cargarDatos(reto, p, inicioSemana, finSemana, puntosAcum, puntosPrev, posicion);
             SnapshotSemanalUsuario nuevo = construirSnapshot(reto, p, numeroSemana, inicioSemana, finSemana, hoy, datos);
             SnapshotSemanalUsuario previo = existentes.get(userId);
             if (previo != null) {
@@ -174,6 +185,55 @@ public class SnapshotService {
         return retoPointsScoringService.scoreUsers(c.getId(), userIds, inicio, fin);
     }
 
+    /**
+     * Posición por puntos acumulados hasta el fin de la semana. El roster es el de la competencia;
+     * si no hay miembros individuales, se ordenan los inscritos del experimento.
+     * Null si la competencia no es de puntos de reto.
+     */
+    private Map<Long, Integer> posicionesDeLaSemana(
+            ExperimentoReto reto, List<ParticipanteReto> participantes, LocalDate finSemana) {
+        Competition c = reto.getCompetition();
+        if (c == null || c.getMetricType() != MetricType.TEAM_POINTS) return null;
+
+        List<Long> roster = memberParticipantRepo.findLeaderboard(c.getId()).stream()
+                .map(p -> p.getUser().getId())
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (roster.isEmpty()) {
+            roster = participantes.stream().map(p -> p.getUsuario().getId()).distinct().toList();
+        }
+        Map<Long, Double> puntos = puntosReto(reto, roster, finSemana);
+        if (puntos == null) return null;
+
+        Map<Long, Double> completos = new LinkedHashMap<>();
+        for (Long id : roster) {
+            completos.put(id, puntos.get(id));
+        }
+        return ranksFromScores(completos);
+    }
+
+    /** Mayor puntaje primero. Empate: id de usuario ascendente. Rangos consecutivos. Null cuenta como 0. */
+    static Map<Long, Integer> ranksFromScores(Map<Long, Double> puntos) {
+        List<Long> ids = new java.util.ArrayList<>(puntos.keySet());
+        ids.sort((a, b) -> {
+            int cmp = Double.compare(scoreOrZero(puntos, b), scoreOrZero(puntos, a));
+            if (cmp != 0) return cmp;
+            return Long.compare(a, b);
+        });
+        Map<Long, Integer> ranks = new LinkedHashMap<>();
+        int rank = 1;
+        for (Long id : ids) {
+            ranks.put(id, rank++);
+        }
+        return ranks;
+    }
+
+    private static double scoreOrZero(Map<Long, Double> puntos, Long id) {
+        Double value = puntos.get(id);
+        return value == null ? 0.0 : value;
+    }
+
     record DatosSemana(
             List<WorkoutSet> sets,
             List<FreeActivitySession> libres,
@@ -193,7 +253,8 @@ public class SnapshotService {
             LocalDate inicioSemana,
             LocalDate finSemana,
             Map<Long, Double> puntosAcum,
-            Map<Long, Double> puntosPrev
+            Map<Long, Double> puntosPrev,
+            Integer posicionLeaderboard
     ) {
         Long userId = participante.getUsuario().getId();
         LocalDateTime start = inicioSemana.atStartOfDay();
@@ -210,7 +271,7 @@ public class SnapshotService {
                 achievementRepo.countByUser_IdAndUnlockedAtGreaterThanEqualAndUnlockedAtLessThan(userId, inicioReto, end),
                 puntosAcum != null ? puntosAcum.get(userId) : null,
                 puntosPrev != null ? puntosPrev.get(userId) : null,
-                obtenerPosicionLeaderboard(reto, userId)
+                posicionLeaderboard
         );
     }
 

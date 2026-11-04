@@ -10,7 +10,9 @@ import org.mockito.ArgumentCaptor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -68,6 +70,24 @@ class SnapshotServiceTest {
         verify(snapshotRepo).save(captor.capture());
         assertEquals(new BigDecimal("41.00"), captor.getValue().getPuntosRetoAcumulados());
         assertEquals(new BigDecimal("41.00"), captor.getValue().getPuntosRetoSemana());
+        assertEquals(1, captor.getValue().getPosicionLeaderboard());
+    }
+
+    @Test
+    @DisplayName("La posición desempata por id y trata el puntaje nulo como cero")
+    void posicionEmpateYPuntajeNulo() {
+        Map<Long, Double> puntos = new HashMap<>();
+        puntos.put(2L, 10.0);
+        puntos.put(1L, 10.0);
+        puntos.put(4L, 25.0);
+        puntos.put(3L, null);
+
+        Map<Long, Integer> ranks = SnapshotService.ranksFromScores(puntos);
+
+        assertEquals(1, ranks.get(4L));
+        assertEquals(2, ranks.get(1L));
+        assertEquals(3, ranks.get(2L));
+        assertEquals(4, ranks.get(3L));
     }
 
     @Test

@@ -44,11 +44,46 @@ class ExperimentExportServiceTest {
         String csv = service.exportarCsvSemanal(1L, null);
         String[] filas = csv.split("\n");
 
-        verify(snapshotService).actualizarSnapshotsPendientes(1L);
+        verify(snapshotService).recalcularSemanasTranscurridas(1L);
         assertEquals(5, filas.length);
         assertTrue(filas[0].startsWith("participante_id,grupo"));
         assertEquals(2, java.util.Arrays.stream(filas).filter(f -> f.startsWith("12,")).count());
         assertEquals(2, java.util.Arrays.stream(filas).filter(f -> f.startsWith("11,")).count());
+    }
+
+    @Test
+    @DisplayName("El CSV principal incluye inactivos y quienes no completaron pre o post cuando se pide el archivo completo")
+    void csvPrincipalIncluyeIncompletosEInactivos() {
+        ExperimentoRetoRepository retoRepo = mock(ExperimentoRetoRepository.class);
+        ParticipanteRetoRepository participanteRepo = mock(ParticipanteRetoRepository.class);
+        SnapshotSemanalUsuarioRepository snapshotRepo = mock(SnapshotSemanalUsuarioRepository.class);
+        SnapshotService snapshotService = mock(SnapshotService.class);
+        ExperimentExportService service = new ExperimentExportService(
+                retoRepo, participanteRepo, mock(IpaqRespuestaRepository.class), mock(SusRespuestaRepository.class),
+                snapshotRepo, mock(OrganizationalAccessService.class), snapshotService,
+                mock(CompetitionParticipantRepository.class), mock(CompetitionMemberParticipantRepository.class));
+
+        LocalDate inicio = LocalDate.of(2026, 3, 2);
+        ExperimentoReto reto = ExperimentoReto.builder()
+                .id(3L).fechaInicio(inicio).fechaFin(inicio.plusWeeks(8)).semanasIntervencion(8).build();
+        when(retoRepo.findById(3L)).thenReturn(Optional.of(reto));
+        when(snapshotService.semanasTranscurridas(any())).thenReturn(8);
+
+        ParticipanteReto completo = participante(11L, 101L, true);
+        ParticipanteReto sinPost = participante(12L, 102L, false);
+        ParticipanteReto inactivo = participante(13L, 103L, false);
+        inactivo.setActivo(false);
+        when(participanteRepo.findByRetoIdWithUsuario(3L)).thenReturn(List.of(completo, sinPost, inactivo));
+        when(snapshotRepo.findByRetoIdAndUsuarioIdOrderByNumeroSemanaAsc(anyLong(), anyLong())).thenReturn(List.of());
+
+        String csv = service.exportarCsvPrincipal(3L, null, true, false, true);
+        String[] filas = csv.split("\n");
+
+        verify(snapshotService).recalcularSemanasTranscurridas(3L);
+        assertEquals(4, filas.length);
+        assertTrue(java.util.Arrays.stream(filas).anyMatch(f -> f.startsWith("11,")));
+        assertTrue(java.util.Arrays.stream(filas).anyMatch(f -> f.startsWith("12,")));
+        assertTrue(java.util.Arrays.stream(filas).anyMatch(f -> f.startsWith("13,")));
     }
 
     private static ParticipanteReto participante(Long id, Long userId, boolean posttest) {
